@@ -39,7 +39,7 @@ const field = (name, label, type = "text") =>
   `<label>${label}<input name="${name}" type="${type}" required></label>`;
 async function boot() {
   const s = await api("setup");
-  if (s.required) return auth(true);
+  if (s.required) return auth(true, s.keyRequired);
   try {
     state = await api("state");
     render();
@@ -47,8 +47,8 @@ async function boot() {
     auth(false);
   }
 }
-function auth(setup) {
-  app.innerHTML = `<section class="auth"><h1>${setup ? "Set up Relay" : "Welcome back"}</h1><p>${setup ? "Create your administrator account. Use a password of at least 12 characters." : "Sign in to your delivery workspace."}</p><form id="auth">${setup ? field("name", "Your name") : ""}${field("email", "Email", "email")}${field("password", "Password", "password")}<button>${setup ? "Create administrator" : "Sign in"}</button></form></section>`;
+function auth(setup, keyRequired = false) {
+  app.innerHTML = `<section class="auth"><h1>${setup ? "Set up Relay" : "Welcome back"}</h1><p>${setup ? "Create your administrator account. Use a password of at least 12 characters." : "Sign in to your delivery workspace."}</p><form id="auth">${setup ? field("name", "Your name") : ""}${setup && keyRequired ? field("setupKey", "Setup key (from Hostinger settings)", "password") : ""}${field("email", "Email", "email")}${field("password", "Password", "password")}<button>${setup ? "Create administrator" : "Sign in"}</button></form></section>`;
   $("#auth").onsubmit = (e) => {
     e.preventDefault();
     run(async () => {

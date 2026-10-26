@@ -13,8 +13,12 @@ const {
   validateProof,
 } = require("./domain");
 const bwipjs = require("bwip-js");
-fs.mkdirSync("data/proofs", { recursive: true });
-const db = new DatabaseSync("data/app.db");
+const path = require("node:path");
+const dataDir = process.env.DATA_DIR || path.resolve("data");
+if (!path.isAbsolute(dataDir))
+  throw Error("DATA_DIR must be an absolute directory");
+fs.mkdirSync(dataDir, { recursive: true });
+const db = new DatabaseSync(path.join(dataDir, "app.db"));
 db.exec(
   "CREATE TABLE IF NOT EXISTS records (kind TEXT, id TEXT, body TEXT, PRIMARY KEY(kind,id))",
 );
@@ -35,6 +39,17 @@ const get = (k, id) => all(k).find((o) => o.id === id);
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "8mb" }));
+const production = process.env.NODE_ENV === "production";
+if (production && (process.env.SESSION_SECRET || "").length < 32)
+  throw Error("Set SESSION_SECRET to a random value of at least 32 characters");
+if (
+  (process.env.SETUP_KEY || production) &&
+  (process.env.SETUP_KEY || "").length < 32 &&
+  !all("users").length
+)
+  throw Error(
+    "Set SETUP_KEY to a separate random value of at least 32 characters before first setup",
+  );
 const secret =
   process.env.SESSION_SECRET || crypto.randomBytes(48).toString("hex");
 app.use(
@@ -50,14 +65,34 @@ app.use(
     },
   }),
 );
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
 app.get("/api/setup", (_, r) =>
-  r.json({ required: all("users").length === 0 }),
+  r.json({
+    required: all("users").length === 0,
+    keyRequired: Boolean(process.env.SETUP_KEY) || production,
+  }),
 );
 app.post("/api/setup", async (q, r) => {
   if (all("users").length)
     return r.status(409).json({ error: "Already configured" });
-  if (!q.body.name || !q.body.email || q.body.password?.length < 12)
+  if (process.env.SETUP_KEY || production) {
+    const supplied = typeof q.body.setupKey === "string" ? q.body.setupKey : "";
+    const digest = (value) =>
+      crypto.createHash("sha256").update(value).digest();
+    if (
+      !process.env.SETUP_KEY ||
+      !crypto.timingSafeEqual(digest(supplied), digest(process.env.SETUP_KEY))
+    )
+      return r.status(403).json({ error: "Valid setup key required" });
+  }
+  if (
+    typeof q.body.name !== "string" ||
+    !q.body.name.trim() ||
+    typeof q.body.email !== "string" ||
+    !q.body.email.trim() ||
+    typeof q.body.password !== "string" ||
+    q.body.password.length < 12
+  )
     return r.status(400).json({
       error: "Name, email and a password of at least 12 characters required",
     });
@@ -475,6 +510,6 @@ for (const order of all("orders")) {
     save("orders", order);
   }
 }
-app.listen(process.env.PORT || 3000, "0.0.0.0", () =>
-  console.log("Delivery app listening"),
+const listener = app.listen(process.env.PORT || 3000, "0.0.0.0", () =>
+  console.log("Delivery app listening " + listener.address().port),
 );

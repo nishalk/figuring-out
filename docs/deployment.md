@@ -12,7 +12,9 @@ Set `SESSION_SECRET` to a strong random value in the host's secure environment-v
 
 ## First account
 
-Do not expose the empty app's administrator-registration endpoint to the public. Restrict the service using the host's private access or temporary access control, create the administrator account over HTTPS, and verify that GET `/api/setup` returns `{"required":false}` before opening access to testers. If the provider has no way to protect initial registration, implement an invitation/bootstrap mechanism before deploying. Do not reuse development accounts or copy a database with test credentials to the public service.
+Set `NODE_ENV=production`, and generate separate random `SESSION_SECRET` and `SETUP_KEY` values of at least 32 characters directly in the host's secure environment-variable editor. Keep the setup key in your password manager. Production startup fails if the session secret is missing/too short, or if an empty database has no adequate setup key. The administrator-registration form requires that setup key. A missing or incorrect key cannot register an administrator; after the first account, further registration at that endpoint is disabled. Use the first-account form to choose your own email and a separate account password. Do not send any of these values in chat.
+
+`DATA_DIR` optionally specifies the absolute writable directory for `app.db`. Set it only after the host confirms a persistent path. The default is `data/` under the process working directory; this is not evidence that hosted data survives deployments. Dummy-data trials can validate startup while storage retention is unresolved, but do not use real customer records. The configured-directory restart test passes locally; Hostinger storage persistence still needs independent verification.
 
 ## Domain connection
 
@@ -27,3 +29,7 @@ Orders, user accounts and proof images are all in SQLite at `/app/data/app.db`. 
 ## Current verification status
 
 The app's six automated tests and phone-sized browser trial passed before packaging. Container build verification in this workspace is incomplete: Docker's network could not resolve the workspace proxy hostname (`EAI_AGAIN`). Dependencies were not installed in an image, and no container runtime or domain deployment is claimed. Verify the image build and persistent storage on the selected host before trial use. The domain owner identified Hostinger; its hosting plan and deployment access are still unknown.
+
+## Hostinger managed Node deployment
+
+The selected destination is `delivery.areyoutrip.in`, with Express, branch `main`, Node.js `24.x`, npm, entry file `server.js`, and root `./`. Use the environment variables above. The existing WordPress site remains at the root domain. The application itself does not provide durable sessions yet. Verify HTTPS, forwarded secure cookies, login, and database retention on Hostinger after deployment; managed hosting details cannot be inferred from the setup screenshots.

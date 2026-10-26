@@ -12,7 +12,7 @@ npm start
 
 Open the app and create the first administrator account. Create driver and warehouse users, register vendors, then create orders. Excel imports use one item per row; columns are `reference, recipient, phone, address, vendorCode, name, quantity`. Phone cells must be text (`+965` and eight digits). Validate the preview before confirming.
 
-Operational data and proof images are stored in `data/app.db`; keep this on a persistent volume and back it up. Never commit it. A running cloud development workspace is not public production hosting. HTTPS is required for phone GPS and secure cookies. For HTTPS deployment set `NODE_ENV=production` and a securely supplied `SESSION_SECRET`. The first-administrator setup must be completed privately before making the service public.
+Operational data and proof images are stored in `data/app.db`; keep this on a persistent volume and back it up. Never commit it. A running cloud development workspace is not public production hosting. HTTPS is required for phone GPS and secure cookies. For HTTPS deployment set `NODE_ENV=production` and a securely supplied `SESSION_SECRET`. Production startup requires SESSION_SECRET and, for an empty database, SETUP_KEY: generate separate random values of at least 32 characters in the hosting settings. The initial administrator form requires SETUP_KEY; its value is never exposed by the setup endpoint. Keep the key in a password manager. For persistent storage, DATA_DIR accepts an absolute writable directory confirmed by the host; its default is data/ under the working directory.
 
 ## Current scope and limitations
 
