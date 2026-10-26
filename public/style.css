@@ -2461,3 +2461,25 @@ canvas {
     height: 52px;
   }
 }
+.permissionChecklist {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+}
+.permissionChecklist label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.permissionChecklist input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.demoAccountNotice {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--accent-soft);
+}

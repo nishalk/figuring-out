@@ -151,7 +151,7 @@ function render() {
   releaseFleetMap();
   const admin = state.user.role === "admin",
     ops = admin || state.user.role === "operations";
-  const pages = [
+  let pages = [
     ...(ops
       ? [{ id: "dashboard", label: "Dashboard", symbol: "warehouse" }]
       : []),
@@ -166,6 +166,24 @@ function render() {
     ...(admin ? [{ id: "users", label: "Team access", symbol: "users" }] : []),
     { id: "settings", label: "Settings", symbol: "vendor" },
   ];
+  pages = pages.filter(
+    (p) =>
+      !{
+        dashboard: "dashboard",
+        reports: "reports",
+        create: "create",
+        vendors: "vendors",
+      }[p.id] ||
+      MawadaAccess.allowed(
+        state.user,
+        {
+          dashboard: "dashboard",
+          reports: "reports",
+          create: "create",
+          vendors: "vendors",
+        }[p.id],
+      ),
+  );
   if (!pages.some((p) => p.id === view)) view = "orders";
   $("#logout").hidden = false;
   const titles = {
@@ -177,7 +195,7 @@ function render() {
     reports: "The full story of every order.",
     settings: "Make Mawada yours.",
   };
-  app.innerHTML = `<div class="appShell"><aside class="workspaceSidebar"><div class="workspaceLabel">WORKSPACE <span class="liveDot"></span></div><div class="workspaceName">Mawada delivery<small>One warehouse · Online delivery</small></div><nav aria-label="Workspace navigation">${pages.map((p) => `<button data-view="${p.id}" class="${view === p.id ? "active" : ""}" ${view === p.id ? 'aria-current="page"' : ""}>${icon(p.symbol)}<span>${p.label}</span>${p.id === "orders" ? `<span class="navCount">${state.orders.length}</span>` : ""}</button>`).join("")}</nav><div class="sidebarNote">${icon("check")}<div>Complete orders only<small>Every item checked before dispatch.</small></div></div><div class="userCard"><span class="avatar">${esc(state.user.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.role)}</small></div></div></aside><div class="workspaceMain"><div class="pageHeading"><div><div class="eyebrow">OPERATIONS / ${esc(pages.find((p) => p.id === view).label.toUpperCase())}</div><h1>${titles[view]}</h1><p class="muted">${view === "orders" ? "Track pickups, consolidate with confidence, and keep deliveries moving." : "Everything your team needs, without the extra steps."}</p></div>${ops && view === "orders" ? `<button class="primary" id="quickCreate">${icon("plus")} Create order</button>` : ""}</div>${admin ? `<div class="storageNote"><span class="liveDot"></span>${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</div>` : ""}${view === "orders" ? `<div class="stats">${statuses.map((s, i) => `<button class="stat ${statusClass(s)} ${statusFilter === s ? "selected" : ""}" data-status="${s}" aria-pressed="${statusFilter === s}"><div class="statTop"><span>${s}</span>${icon(["box", "truck", "warehouse", "truck", "alert", "check"][i])}</div><div class="statBottom"><strong>${state.orders.filter((o) => o.status === s).length}</strong><span>View orders</span></div></button>`).join("")}</div>` : ""}${ops && view === "orders" ? '<div id="fleetPanel"></div>' : ""}<div id="content"></div><footer class="workspaceFooter"><span>Mawada · Kuwait delivery</span><span>Pickup → Warehouse → Delivery</span></footer></div></div>`;
+  app.innerHTML = `<div class="appShell"><aside class="workspaceSidebar"><div class="workspaceLabel">WORKSPACE <span class="liveDot"></span></div><div class="workspaceName">Mawada delivery<small>One warehouse · Online delivery</small></div><nav aria-label="Workspace navigation">${pages.map((p) => `<button data-view="${p.id}" class="${view === p.id ? "active" : ""}" ${view === p.id ? 'aria-current="page"' : ""}>${icon(p.symbol)}<span>${p.label}</span>${p.id === "orders" ? `<span class="navCount">${state.orders.length}</span>` : ""}</button>`).join("")}</nav><div class="sidebarNote">${icon("check")}<div>Complete orders only<small>Every item checked before dispatch.</small></div></div><div class="userCard"><span class="avatar">${esc(state.user.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.role)}</small></div></div></aside><div class="workspaceMain"><div class="pageHeading"><div><div class="eyebrow">OPERATIONS / ${esc(pages.find((p) => p.id === view).label.toUpperCase())}</div><h1>${titles[view]}</h1><p class="muted">${view === "orders" ? "Track pickups, consolidate with confidence, and keep deliveries moving." : "Everything your team needs, without the extra steps."}</p></div>${ops && MawadaAccess.allowed(state.user, "create") && view === "orders" ? `<button class="primary" id="quickCreate">${icon("plus")} Create order</button>` : ""}</div>${admin ? `<div class="storageNote"><span class="liveDot"></span>${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</div>` : ""}${view === "orders" ? `<div class="stats">${statuses.map((s, i) => `<button class="stat ${statusClass(s)} ${statusFilter === s ? "selected" : ""}" data-status="${s}" aria-pressed="${statusFilter === s}"><div class="statTop"><span>${s}</span>${icon(["box", "truck", "warehouse", "truck", "alert", "check"][i])}</div><div class="statBottom"><strong>${state.orders.filter((o) => o.status === s).length}</strong><span>View orders</span></div></button>`).join("")}</div>` : ""}${ops && view === "orders" ? '<div id="fleetPanel"></div>' : ""}<div id="content"></div><footer class="workspaceFooter"><span>Mawada · Kuwait delivery</span><span>Pickup → Warehouse → Delivery</span></footer></div></div>`;
   document.querySelectorAll("[data-view]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -207,7 +225,8 @@ function render() {
   if (view === "reports") renderReports(c);
   if (view === "settings") renderAppearance(c);
   if (view === "dashboard") renderExecutiveDashboard(c);
-  if (ops && view === "orders") renderFleet($("#fleetPanel"));
+  if (ops && MawadaAccess.allowed(state.user, "dashboard") && view === "orders")
+    renderFleet($("#fleetPanel"));
 }
 async function refresh(message = "Workspace updated") {
   state = await api("state");
@@ -247,9 +266,50 @@ function vendors(c) {
   bindForm("#vendor", "vendors");
 }
 function users(c) {
-  c.innerHTML = `<section><h2>Create team member</h2><form id="user"><div class="grid">${field("name", "Name")}${field("email", "Email", "email")}${field("password", "Password (12+ characters)", "password")}<label>Role<select name="role">${["operations", "warehouse", "driver", "admin"].map((r) => `<option>${r}</option>`).join("")}</select></label></div><button>Create user</button></form></section>${state.users.map((u) => `<section>${esc(u.name)} · ${esc(u.email)} <span class="badge">${u.role}</span></section>`).join("")}`;
-  bindForm("#user", "users");
+  const checklist = (user) =>
+    `<div class="permissionChecklist">${Object.entries(MawadaAccess.labels)
+      .map(
+        ([key, label]) =>
+          `<label><input type="checkbox" name="permissions" value="${key}" ${MawadaAccess.allowed(user, key) ? "checked" : ""} ${!MawadaAccess.defaults[user.role]?.includes(key) || user.role === "admin" ? "disabled" : ""}> ${esc(label)}</label>`,
+      )
+      .join("")}</div>`;
+  c.innerHTML = `<section><h2>Team access</h2><p>Administrators have full access and manage the team. Operations can manage all orders. Warehouse handles receipt and warehouse actions. Drivers access only assigned orders and available AWB claims. Checklists restrict access within each role; they cannot expand it.</p>${window.relayDemo ? '<p class="demoAccountNotice">This is a sample demo. Team accounts here cannot sign in. <a href="/">Open the live app to create real accounts</a>.</p>' : ""}<h3>Create team member</h3><form id="user"><div class="grid">${field("name", "Name")}${field("email", "Email", "email")}${field("password", "Password (12+ characters)", "password")}<label>Role<select name="role">${["operations", "warehouse", "driver", "admin"].map((r) => `<option>${r}</option>`).join("")}</select></label></div><div id="newPermissions"></div><button ${window.relayDemo ? "disabled" : ""}>Create user</button></form></section>${state.users.map((u) => `<section><h3>${esc(u.name)} · ${esc(u.role)}</h3><p>${esc(u.email || "Sample account")}</p><form data-user-permissions="${esc(u.id)}">${checklist(u)}${u.role === "admin" ? "<p>Administrator access is fixed.</p>" : `<button ${window.relayDemo ? "disabled" : ""}>Save access</button>`}</form></section>`).join("")}`;
+  const form = c.querySelector("#user");
+  const update = () =>
+    (c.querySelector("#newPermissions").innerHTML = checklist({
+      role: form.elements.role.value,
+    }));
+  update();
+  form.elements.role.onchange = update;
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    run(async () => {
+      const fields = new FormData(form);
+      const body = Object.fromEntries(fields);
+      body.permissions = fields.getAll("permissions");
+      await api("users", body);
+      await refresh(
+        "Team member created. They can sign in to the live app using this email and password.",
+      );
+    });
+  };
+  c.querySelectorAll("[data-user-permissions]").forEach(
+    (f) =>
+      (f.onsubmit = (e) => {
+        e.preventDefault();
+        run(async () => {
+          await api(
+            "users/" +
+              encodeURIComponent(f.dataset.userPermissions) +
+              "/permissions",
+            { permissions: new FormData(f).getAll("permissions") },
+          );
+          await refresh("Access updated");
+        });
+      }),
+  );
 }
+
 function create(c) {
   c.innerHTML = `<section><h2>Create order</h2><form id="order"><div class="grid">${field("reference", "Your order reference")}${field("recipient", "Recipient name")}${field("phone", "Phone (+965 followed by 8 digits)")}${field("address", "Delivery address")}</div><h3>Items and pickups</h3><div id="items"></div><button type="button" id="add">Add item</button><button>Create order</button></form></section><section><h2>Upload Excel (.xlsx)</h2><label>Export format<select id="importFormat"><option value="mawada">Mawada CMS · deliveries due today (Kuwait)</option><option value="template">Relay item-row template</option></select></label><p>Mawada: use named columns for Order Number, Recipient Delivery Date, Recipient Name, Recipient Phone, Recipient Address, Vendor Name, Item Details and Quantity. Only deliveries due today in Kuwait are selected. Use one row per item. For the Relay template, use reference, recipient, phone, address, vendorCode, name, quantity in that order.</p><input id="excel" type="file" accept=".xlsx"><button id="preview">Validate and preview</button><div id="previewResult"></div></section>`;
   const updateRemove = () =>
@@ -662,7 +722,8 @@ $("#logout").onclick = () =>
       await stopLocationSharing();
     } catch {}
     await api("logout", {});
-    location.reload();
+    if (window.relayDemo) location.assign("/");
+    else location.reload();
   });
 startOperationalPolling();
 boot();

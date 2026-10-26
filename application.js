@@ -14,6 +14,7 @@ const bwipjs = require("bwip-js");
 const path = require("node:path");
 const { createStorage } = require("./storage");
 const operations = require("./public/operations");
+const access = require("./public/access");
 async function main() {
   const store = createStorage();
   const all = (kind) => store.all(kind);
@@ -85,7 +86,7 @@ async function main() {
     await save("users", {
       id: "initial-administrator",
       name: q.body.name,
-      email: q.body.email.toLowerCase(),
+      email: q.body.email.trim().toLowerCase(),
       password: bcrypt.hashSync(q.body.password, 12),
       role: "admin",
     });
@@ -93,18 +94,27 @@ async function main() {
   });
   app.post("/api/login", async (q, r) => {
     const u = (await all("users")).find(
-      (u) => u.email === String(q.body.email).toLowerCase(),
+      (u) => u.email === String(q.body.email).trim().toLowerCase(),
     );
     if (!u || !bcrypt.compareSync(q.body.password || "", u.password))
       return r.status(401).json({ error: "Invalid login" });
     q.session.regenerate((e) => {
       if (e) return r.sendStatus(500);
       q.session.uid = u.id;
-      r.json({ ok: true });
+      q.session.save((error) =>
+        error
+          ? r.status(500).json({ error: "Could not save login session" })
+          : r.json({ ok: true }),
+      );
     });
   });
   app.post("/api/logout", (q, r) =>
-    q.session.destroy(() => r.json({ ok: true })),
+    q.session.destroy((error) => {
+      if (error)
+        return r.status(500).json({ error: "Sign out failed; try again" });
+      r.clearCookie("connect.sid", { path: "/" });
+      r.json({ ok: true });
+    }),
   );
   app.use("/api", async (q, r, n) => {
     q.user = await get("users", q.session.uid);
@@ -119,6 +129,28 @@ async function main() {
       roles.includes(q.user.role)
         ? n()
         : r.status(403).json({ error: "Access denied" });
+  app.use("/api", (q, r, n) => {
+    const route = q.path;
+    const permission = route.startsWith("/reports")
+      ? "reports"
+      : route.startsWith("/fleet")
+        ? "dashboard"
+        : q.method === "POST" && route === "/vendors"
+          ? "vendors"
+          : q.method === "POST" &&
+              (route === "/orders" || route.startsWith("/import"))
+            ? "create"
+            : q.method === "POST" &&
+                (route.match(/^\/orders\/[^/]+\/action$/) ||
+                  route.startsWith("/driver/"))
+              ? "work"
+              : null;
+    if (permission && !access.allowed(q.user, permission))
+      return r
+        .status(403)
+        .json({ error: "Your account does not have access to this action." });
+    n();
+  });
   require("./operational-routes")(app, store, permit);
   app.get("/api/state", async (q, r) => {
     const orders = (await all("orders"))
@@ -152,19 +184,22 @@ async function main() {
       users,
       vendors: q.user.role === "driver" ? [] : await all("vendors"),
       orders,
-      fleet: ["admin", "operations"].includes(q.user.role)
+      fleet: access.allowed(q.user, "dashboard")
         ? operations.fleet(await all("users"), orders)
         : undefined,
     });
   });
   app.post("/api/users", permit("admin"), async (q, r) => {
-    const { name, email, password, role } = q.body;
+    const { name, email, password, role, permissions } = q.body;
     if (
       !name ||
-      !email ||
-      password?.length < 12 ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      password.length < 12 ||
+      (permissions !== undefined && !access.validate(role, permissions)) ||
       !["admin", "operations", "warehouse", "driver"].includes(role) ||
-      (await all("users")).some((u) => u.email === email.toLowerCase())
+      (await all("users")).some((u) => u.email === email.trim().toLowerCase())
     )
       return r.status(400).json({
         error: "Check user details, unique email and 12-character password",
@@ -172,10 +207,32 @@ async function main() {
     await save("users", {
       id: crypto.randomUUID(),
       name,
-      email: email.toLowerCase(),
+      email: email.trim().toLowerCase(),
       password: bcrypt.hashSync(password, 12),
       role,
+      ...(permissions === undefined ? {} : { permissions }),
     });
+    r.json({ ok: true });
+  });
+  app.post("/api/users/:id/permissions", permit("admin"), async (q, r) => {
+    const user = await get("users", q.params.id);
+    if (!user) return r.status(404).json({ error: "User not found" });
+    if (user.role === "admin")
+      return r
+        .status(400)
+        .json({ error: "Administrator access is fixed to prevent lockout" });
+    if (!access.validate(user.role, q.body.permissions))
+      return r.status(400).json({ error: "Invalid permission for this role" });
+    user.permissions = [...new Set(q.body.permissions)];
+    user.permissionHistory = [
+      ...(user.permissionHistory || []),
+      {
+        by: q.user.id,
+        at: new Date().toISOString(),
+        permissions: user.permissions,
+      },
+    ].slice(-100);
+    await save("users", user);
     r.json({ ok: true });
   });
   app.post("/api/vendors", permit("admin", "operations"), async (q, r) => {

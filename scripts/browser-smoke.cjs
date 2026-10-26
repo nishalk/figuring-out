@@ -106,6 +106,18 @@ const fs = require("node:fs"),
       .getByRole("heading", { name: "Order board", exact: true })
       .waitFor();
     await page.locator("#statusFilter").selectOption("");
+    await page.locator("[data-view=users]").click();
+    await page.locator("#user [name=role]").selectOption("warehouse");
+    assert.equal(
+      await page.locator("#newPermissions input[value=reports]").isDisabled(),
+      true,
+    );
+    assert.equal(
+      await page.locator("#newPermissions input[value=work]").isChecked(),
+      true,
+    );
+    assert.equal(await page.locator("#user button").isDisabled(), true);
+    await page.locator("[data-view=orders]").click();
     // Appearance preference survives reloads, and System tracks the device.
     await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
     assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");

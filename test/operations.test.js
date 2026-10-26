@@ -287,6 +287,52 @@ test(
       assert.equal(book.getWorksheet("Orders").getCell("B2").value, "=1+1");
       assert.equal(book.getWorksheet("Trips").rowCount, 3);
       assert.ok(book.getWorksheet("Order history").rowCount > 5);
+      await req(winner, "logout", {});
+      await req(winner, "state", null, 401);
+      await req(winner, "login", {
+        email:
+          "  " +
+          (winnerId === da.id ? "DriverA" : "DriverB") +
+          "@EXAMPLE.TEST  ",
+        password,
+      });
+      assert.equal((await req(winner, "state")).user.id, winnerId);
+      await req(admin, "users/" + winnerId + "/permissions", {
+        permissions: [],
+      });
+      await req(winner, "driver/claim", { awb: o.awb, leg: "delivery" }, 403);
+      await req(
+        winner,
+        "users/" + loserId + "/permissions",
+        { permissions: [] },
+        403,
+      );
+      await req(
+        admin,
+        "users/" + winnerId + "/permissions",
+        { permissions: ["reports"] },
+        400,
+      );
+      await req(admin, "users", {
+        name: "Restricted dispatcher",
+        email: "restricted@example.test",
+        password,
+        role: "operations",
+        permissions: [],
+      });
+      const restricted = agent();
+      await req(restricted, "login", {
+        email: "restricted@example.test",
+        password,
+      });
+      await req(restricted, "reports", null, 403);
+      await req(
+        restricted,
+        "vendors",
+        { code: "NO", name: "Blocked", address: "Kuwait" },
+        403,
+      );
+      assert.equal((await req(restricted, "state")).fleet, undefined);
     } finally {
       if (child.exitCode === null) {
         const done = new Promise((r) => child.once("exit", r));

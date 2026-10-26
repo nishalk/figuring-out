@@ -299,11 +299,7 @@
         fail("Unique vendor code, name and address required");
       data.vendors.push({ ...b, id: crypto.randomUUID() });
     } else if (url === "users") {
-      if (current().role !== "admin") fail("Administrator access required");
-      if (!b.name || !b.email || data.users.some((u) => u.email === b.email))
-        fail("Unique email and name required");
-      const { password, ...user } = b;
-      data.users.push({ ...user, id: crypto.randomUUID() });
+      fail("Create real login accounts in the live app, not the sample demo.");
     } else if (url === "orders") {
       assertManager();
       if (
