@@ -36,6 +36,7 @@ test(
       assert.equal((await setup.json()).code, "SESSION_SECRET_REQUIRED");
       assert.equal((await fetch(url + "/health/live")).status, 200);
       assert.equal((await fetch(url + "/demo")).status, 200);
+      assert.equal((await fetch(url + "/driver")).status, 200);
       assert.equal((await fetch(url + "/demo.js")).status, 200);
       const attempted = await fetch(url + "/api/setup", {
         method: "POST",

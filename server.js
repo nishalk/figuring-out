@@ -6,7 +6,20 @@ let startup = {
   code: "STARTING",
   message: "The application is starting. Try again shortly.",
 };
+app.use(
+  "/assets/leaflet",
+  express.static(
+    path.join(path.dirname(require.resolve("leaflet/package.json")), "dist"),
+    { maxAge: "1h" },
+  ),
+);
+app.get("/assets/zxing.js", (_, res) =>
+  res.sendFile(require.resolve("@zxing/library/umd/index.min.js")),
+);
 app.use(express.static(path.join(__dirname, "public"), { index: false }));
+app.get("/driver", (_, res) =>
+  res.sendFile(path.join(__dirname, "public/index.html")),
+);
 app.get("/demo", (_, res) =>
   res.sendFile(path.join(__dirname, "public/index.html")),
 );

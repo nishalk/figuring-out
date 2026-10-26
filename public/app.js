@@ -141,6 +141,7 @@ function auth(setup, keyRequired = false) {
   };
 }
 function render() {
+  releaseFleetMap();
   const admin = state.user.role === "admin",
     ops = admin || state.user.role === "operations";
   const pages = [
@@ -149,6 +150,7 @@ function render() {
       ? [
           { id: "create", label: "New order / Excel", symbol: "plus" },
           { id: "vendors", label: "Vendors", symbol: "vendor" },
+          { id: "reports", label: "Reports", symbol: "orders" },
         ]
       : []),
     ...(admin ? [{ id: "users", label: "Team access", symbol: "users" }] : []),
@@ -160,8 +162,9 @@ function render() {
     create: "A new journey starts here.",
     vendors: "Your pickup network.",
     users: "The people who keep it moving.",
+    reports: "The full story of every order.",
   };
-  app.innerHTML = `<div class="appShell"><aside class="workspaceSidebar"><div class="workspaceLabel">WORKSPACE <span class="liveDot"></span></div><div class="workspaceName">Kuwait operations<small>One warehouse · Online delivery</small></div><nav aria-label="Workspace navigation">${pages.map((p) => `<button data-view="${p.id}" class="${view === p.id ? "active" : ""}" ${view === p.id ? 'aria-current="page"' : ""}>${icon(p.symbol)}<span>${p.label}</span>${p.id === "orders" ? `<span class="navCount">${state.orders.length}</span>` : ""}</button>`).join("")}</nav><div class="sidebarNote">${icon("check")}<div>Complete orders only<small>Every item checked before dispatch.</small></div></div><div class="userCard"><span class="avatar">${esc(state.user.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.role)}</small></div></div></aside><div class="workspaceMain"><div class="pageHeading"><div><div class="eyebrow">OPERATIONS / ${esc(pages.find((p) => p.id === view).label.toUpperCase())}</div><h1>${titles[view]}</h1><p class="muted">${view === "orders" ? "Track pickups, consolidate with confidence, and keep deliveries moving." : "Everything your team needs, without the extra steps."}</p></div>${ops && view === "orders" ? `<button class="primary" id="quickCreate">${icon("plus")} Create order</button>` : ""}</div>${admin ? `<div class="storageNote"><span class="liveDot"></span>${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</div>` : ""}${view === "orders" ? `<div class="stats">${statuses.map((s, i) => `<button class="stat ${statusClass(s)} ${statusFilter === s ? "selected" : ""}" data-status="${s}" aria-pressed="${statusFilter === s}"><div class="statTop"><span>${s}</span>${icon(["box", "truck", "warehouse", "truck", "alert", "check"][i])}</div><div class="statBottom"><strong>${state.orders.filter((o) => o.status === s).length}</strong><span>View orders</span></div></button>`).join("")}</div>` : ""}<div id="content"></div><footer class="workspaceFooter"><span>Relay · Kuwait operations</span><span>Pickup → Warehouse → Delivery</span></footer></div></div>`;
+  app.innerHTML = `<div class="appShell"><aside class="workspaceSidebar"><div class="workspaceLabel">WORKSPACE <span class="liveDot"></span></div><div class="workspaceName">Kuwait operations<small>One warehouse · Online delivery</small></div><nav aria-label="Workspace navigation">${pages.map((p) => `<button data-view="${p.id}" class="${view === p.id ? "active" : ""}" ${view === p.id ? 'aria-current="page"' : ""}>${icon(p.symbol)}<span>${p.label}</span>${p.id === "orders" ? `<span class="navCount">${state.orders.length}</span>` : ""}</button>`).join("")}</nav><div class="sidebarNote">${icon("check")}<div>Complete orders only<small>Every item checked before dispatch.</small></div></div><div class="userCard"><span class="avatar">${esc(state.user.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.role)}</small></div></div></aside><div class="workspaceMain"><div class="pageHeading"><div><div class="eyebrow">OPERATIONS / ${esc(pages.find((p) => p.id === view).label.toUpperCase())}</div><h1>${titles[view]}</h1><p class="muted">${view === "orders" ? "Track pickups, consolidate with confidence, and keep deliveries moving." : "Everything your team needs, without the extra steps."}</p></div>${ops && view === "orders" ? `<button class="primary" id="quickCreate">${icon("plus")} Create order</button>` : ""}</div>${admin ? `<div class="storageNote"><span class="liveDot"></span>${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</div>` : ""}${view === "orders" ? `<div class="stats">${statuses.map((s, i) => `<button class="stat ${statusClass(s)} ${statusFilter === s ? "selected" : ""}" data-status="${s}" aria-pressed="${statusFilter === s}"><div class="statTop"><span>${s}</span>${icon(["box", "truck", "warehouse", "truck", "alert", "check"][i])}</div><div class="statBottom"><strong>${state.orders.filter((o) => o.status === s).length}</strong><span>View orders</span></div></button>`).join("")}</div>` : ""}${ops && view === "orders" ? '<div id="fleetPanel"></div>' : ""}<div id="content"></div><footer class="workspaceFooter"><span>Relay · Kuwait operations</span><span>Pickup → Warehouse → Delivery</span></footer></div></div>`;
   document.querySelectorAll("[data-view]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -188,11 +191,14 @@ function render() {
   if (view === "create") create(c);
   if (view === "vendors") vendors(c);
   if (view === "users") users(c);
+  if (view === "reports") renderReports(c);
+  if (ops && view === "orders") renderFleet($("#fleetPanel"));
 }
 async function refresh(message = "Workspace updated") {
   state = await api("state");
   render();
   toast(message);
+  reconcileTracking();
 }
 function bindForm(id, path, transform = (x) => x) {
   $(id).onsubmit = (e) => {
@@ -305,6 +311,7 @@ function journey(o) {
   return `<ol class="journey" aria-label="Order progress">${["Pickup", "Warehouse", "On the road", "Delivered"].map((label, i) => `<li class="${i < active || (i === 3 && active === 3) ? "done" : i === active ? "current" : ""}"><span>${i < active || (i === 3 && active === 3) ? icon("check") : i + 1}</span><small>${label}</small></li>`).join("")}</ol>`;
 }
 function orders(c) {
+  pendingOrderRefresh = false;
   const manager = ["admin", "operations"].includes(state.user.role),
     warehouse = ["admin", "warehouse"].includes(state.user.role);
   const drivers = state.users.filter((u) => u.role === "driver");
@@ -313,7 +320,7 @@ function orders(c) {
   const button = (o, action, label, extra = "") =>
     `<button data-order="${o.id}" data-action="${action}" ${extra}>${label}</button>`;
   if (!selectedOrder && state.orders.length) selectedOrder = state.orders[0].id;
-  c.innerHTML = `<div class="boardHeading"><div><h2>Order board</h2><p class="muted" id="resultCount"></p></div><button class="ghost" id="expandOrders">Expand all</button></div><div class="orderToolbar"><label class="searchField">${icon("search")}<input id="orderSearch" type="search" aria-label="Search orders" placeholder="Search AWB, recipient, vendor or reference…" value="${esc(searchQuery)}"></label><label class="filterField"><span class="sr-only">Filter by status</span><select id="statusFilter" aria-label="Filter by status"><option value="">All statuses</option>${statuses.map((s) => `<option ${statusFilter === s ? "selected" : ""}>${s}</option>`).join("")}</select></label><label class="filterField"><span class="sr-only">Sort orders</span><select id="orderSort" aria-label="Sort orders"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="reference">Order reference</option></select></label></div><section id="noResults" class="emptyState" hidden>${icon("search")}<h3>No matching orders</h3><p class="muted">Try a different reference or clear your filters.</p><button id="clearFilters" class="secondary">Clear filters</button></section><div id="orderList">${state.orders
+  c.innerHTML = `${state.user.role === "driver" ? '<div id="driverTools"></div>' : ""}<div class="boardHeading"><div><h2>Order board</h2><p class="muted" id="resultCount"></p></div><button class="ghost" id="expandOrders">Expand all</button></div><div class="orderToolbar"><label class="searchField">${icon("search")}<input id="orderSearch" type="search" aria-label="Search orders" placeholder="Search AWB, recipient, vendor or reference…" value="${esc(searchQuery)}"></label><label class="filterField"><span class="sr-only">Filter by status</span><select id="statusFilter" aria-label="Filter by status"><option value="">All statuses</option>${statuses.map((s) => `<option ${statusFilter === s ? "selected" : ""}>${s}</option>`).join("")}</select></label><label class="filterField"><span class="sr-only">Sort orders</span><select id="orderSort" aria-label="Sort orders"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="reference">Order reference</option></select></label></div><section id="noResults" class="emptyState" hidden>${icon("search")}<h3>No matching orders</h3><p class="muted">Try a different reference or clear your filters.</p><button id="clearFilters" class="secondary">Clear filters</button></section><div id="orderList">${state.orders
     .map(
       (
         o,
@@ -337,15 +344,16 @@ function orders(c) {
    )
    .join("")}
  ${manager && !p.completed ? `<form class="taskAssign" data-order="${o.id}" data-pickup="${p.id}">${driverSelect()}<button>Assign pickup driver</button></form>` : ""}
- ${!p.completed && (manager || (state.user.role === "driver" && p.driver === state.user.id)) ? button(o, "pickup", "Verify items and record pickup", `data-pickup="${p.id}"`) : ""}
+ ${pickupTripControls(o, p, manager, button)}
+ ${!p.completed && (manager || (state.user.role === "driver" && p.driver === state.user.id && RelayOperations.activeTrips(o).some((t) => t.kind === "pickup" && t.pickupId === p.id))) ? button(o, "pickup", "Verify items and record pickup", `data-pickup="${p.id}"`) : ""}
  ${p.legacy ? "<small>Historical pickup: separate vendor proof was not recorded.</small>" : ""}</div>`,
    )
    .join("")}
  <h3>Warehouse manifest</h3>${o.items.map((i) => `<div class="item row"><span>${i.received ? "✓ Received" : "○ Awaiting receipt"} · ${esc(i.name)} × ${i.quantity}<small>${esc(i.vendor.name)}</small></span>${warehouse && !i.received && ["Created", "Picked up", "At warehouse"].includes(o.status) ? button(o, "receive", "Receive item", `data-item="${i.id}"`) : ""}</div>`).join("")}
  ${warehouse && ["Created", "Picked up", "At warehouse"].includes(o.status) ? `<details><summary>Add an item already at the warehouse</summary><p>This adds a physically received item to this order. Check its order reference before saving.</p><form class="addItem" data-order="${o.id}"><label>Vendor<select name="vendorCode">${state.vendors.map((v) => `<option value="${esc(v.code)}">${esc(v.name)}</option>`).join("")}</select></label>${field("name", "Item name")}${field("quantity", "Quantity", "number")}<button>Add received item</button></form></details>` : ""}
  ${manager && !["Delivered", "Out for delivery"].includes(o.status) ? `<form class="deliveryAssign" data-order="${o.id}"><label>Delivery driver${driverSelect()}</label><button>Assign delivery driver</button></form>` : ""}
- ${o.status === "At warehouse" && (manager || (state.user.role === "driver" && o.driver === state.user.id)) ? button(o, "Out for delivery", "Verify manifest and dispatch") : ""}
- ${o.status === "Out for delivery" && (manager || (state.user.role === "driver" && o.driver === state.user.id)) ? button(o, "Delivered", "Record delivery") + button(o, "fail", "Delivery unsuccessful") : ""}
+ ${o.status === "At warehouse" && (manager || (state.user.role === "driver" && o.driver === state.user.id)) ? button(o, "Out for delivery", state.user.role === "driver" ? "Start delivery trip" : "Verify manifest and dispatch") : ""}
+ ${o.status === "Out for delivery" && (manager || (state.user.role === "driver" && o.driver === state.user.id)) ? deliveryTripControls(o, button) + button(o, "Delivered", "Record delivery") + button(o, "fail", "Delivery unsuccessful") : ""}
  ${o.status === "Delivery failed" ? `<p>Latest failure: ${esc(o.attempts?.at(-1)?.reason)}</p><p>${o.returned ? "Returned to warehouse" : "Awaiting warehouse return confirmation"}</p>${warehouse && !o.returned ? button(o, "return", "Confirm physical return") : ""}${manager && o.returned ? `<form class="reschedule" data-order="${o.id}">${field("date", "New delivery date", "date")}<button>Reschedule</button></form>` : ""}` : ""}
  <details><summary>History and proof</summary>${o.history.map((h) => `<p>${esc(h.event)} · ${esc(h.by || "")} · ${new Date(h.at).toLocaleString("en-GB", { timeZone: "Asia/Kuwait" })}${h.reason ? " · " + esc(h.reason) : ""}${h.date ? " · " + esc(h.date) : ""}${h.item ? " · item " + esc(h.item) : ""}</p>`).join("")}${(o.proofs || []).map((p) => `<p>${esc(p.stage)} · ${esc(p.vendor || "")} · ${esc(p.name)} · GPS ${p.lat}, ${p.lng}</p><img width="180" src="${p.photo}" alt="Handover photo">${p.signature ? `<img width="180" src="${p.signature}" alt="Recipient signature">` : ""}`).join("")}</details></div></details></section>`,
     )
@@ -414,6 +422,7 @@ function orders(c) {
     }),
   );
   applyFilters();
+  if (state.user.role === "driver") renderDriverPanel($("#driverTools"));
   for (const [selector, action] of [
     [".taskAssign", "assign-pickup"],
     [".deliveryAssign", "assign"],
@@ -481,9 +490,15 @@ function orders(c) {
             $("#dispatch").showModal();
             return;
           }
-          if (action === "fail") {
+          if (action === "fail" || action === "pickup-failed") {
+            failureAction = action;
+            failurePickup = b.dataset.pickup;
             failureOrder = o;
             $("#failureForm").reset();
+            $("#failureForm h2").textContent =
+              action === "pickup-failed"
+                ? "Pickup unsuccessful"
+                : "Delivery unsuccessful";
             $("#failure").showModal();
             return;
           }
@@ -496,6 +511,10 @@ function orders(c) {
             return;
           await api("orders/" + o.id + "/action", { action, ...extra });
           await refresh();
+          if (action === "start-pickup-trip" && state.user.role === "driver")
+            startLocationSharing(true).catch((error) =>
+              toast(error.message, "error"),
+            );
         })),
   );
 }
@@ -508,7 +527,10 @@ function printLabel(o) {
   img.onload = () => ($("#printLabel").disabled = false);
   img.onerror = () => alert("Label could not load. Close and retry.");
 }
-let dispatchOrder, failureOrder;
+let dispatchOrder,
+  failureOrder,
+  failureAction = "fail",
+  failurePickup;
 $("#dispatchForm").onsubmit = (e) => {
   e.preventDefault();
   run(async () => {
@@ -518,13 +540,18 @@ $("#dispatchForm").onsubmit = (e) => {
     });
     $("#dispatch").close();
     await refresh();
+    if (state.user.role === "driver")
+      startLocationSharing(true).catch((error) =>
+        toast(error.message, "error"),
+      );
   });
 };
 $("#failureForm").onsubmit = (e) => {
   e.preventDefault();
   run(async () => {
     await api("orders/" + failureOrder.id + "/action", {
-      action: "fail",
+      action: failureAction,
+      pickup: failurePickup,
       reason: new FormData(e.target).get("reason"),
     });
     $("#failure").close();
@@ -609,7 +636,11 @@ $("#proofForm").onsubmit = (e) => {
 };
 $("#logout").onclick = () =>
   run(async () => {
+    try {
+      await stopLocationSharing();
+    } catch {}
     await api("logout", {});
     location.reload();
   });
+startOperationalPolling();
 boot();

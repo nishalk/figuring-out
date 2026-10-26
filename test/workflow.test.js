@@ -129,6 +129,7 @@ test("multi-vendor pickup, consolidation, labels, failed delivery and rescheduli
       { ...pickupBody, photo: "data:image/png;base64,invalid" },
       400,
     );
+    await action({ action: "start-pickup-trip", pickup: o.pickups[0].id });
     await action(pickupBody);
     await action(pickupBody, 400);
     assert.equal((await req("state")).orders[0].status, "Created");
@@ -143,6 +144,7 @@ test("multi-vendor pickup, consolidation, labels, failed delivery and rescheduli
     });
     assert.equal((await req("state")).orders[0].status, "Created");
     await login("driver");
+    await action({ action: "start-pickup-trip", pickup: o.pickups[1].id });
     await action({
       action: "pickup",
       pickup: o.pickups[1].id,

@@ -1440,3 +1440,317 @@ canvas {
     margin: 12mm;
   }
 }
+/* Fleet control, driver tools, scanning and reports. */
+.fleetSection {
+  padding: 22px;
+  margin-bottom: 26px;
+}
+.fleetMapHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+  gap: 12px;
+}
+.fleetMapHeading button {
+  min-height: 30px;
+  font-size: 10px;
+  padding: 5px 10px;
+}
+#driverMap {
+  height: 300px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  z-index: 1;
+  margin-top: 10px;
+  background: var(--surface-alt);
+}
+.mapNotice,
+.fleetDefinitions {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 10px 0 14px;
+}
+.fleetDefinitions {
+  margin-bottom: 0;
+}
+.tableScroll {
+  max-width: 100%;
+  overflow: auto;
+  min-width: 0;
+}
+.tableScroll table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11px;
+  min-width: 780px;
+}
+.tableScroll th {
+  padding: 12px 10px;
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.2px;
+  text-align: left;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.tableScroll td {
+  padding: 14px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.tableScroll td small {
+  font-size: 10px;
+  max-width: 210px;
+}
+.tableScroll td button {
+  font-size: 10px;
+  min-height: 30px;
+  padding: 5px 9px;
+}
+.tableScroll details {
+  margin: 0;
+}
+.tableScroll summary {
+  padding: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.tableScroll details p {
+  font-size: 10px;
+  min-width: 120px;
+  margin-top: 10px;
+}
+.driverMarker {
+  background: transparent;
+  border: 0;
+}
+.driverMarker > span {
+  height: 34px;
+  width: 34px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--surface);
+  color: var(--button-text);
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 10px #0004;
+  display: grid;
+  place-items: center;
+}
+.driverMarker > .stale {
+  background: #74849a;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--surface);
+  color: var(--text);
+}
+.leaflet-popup-content p {
+  font-size: 11px;
+  margin: 8px 0;
+}
+.leaflet-control-attribution {
+  font-size: 9px !important;
+}
+.locationState {
+  font-size: 10px;
+  font-weight: 600;
+}
+.locationState.fresh {
+  color: var(--accent);
+}
+.locationState.stale {
+  color: var(--amber);
+}
+[data-theme="dark"] .leaflet-tile-pane {
+  filter: brightness(0.75) saturate(0.75);
+}
+.driverConsole {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  margin-bottom: 24px;
+}
+.driverConsole h2 {
+  font-size: 21px;
+}
+.driverConsole > p {
+  font-size: 10px;
+  margin-bottom: 0;
+}
+.driverConsole .eyebrow {
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.driverCounters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.driverCounters strong {
+  display: block;
+  font-size: 23px;
+  color: var(--text);
+}
+.locationTools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.locationTools span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.locationTools button {
+  font-size: 11px;
+}
+.tripState {
+  margin: 12px 0;
+}
+.tripState small {
+  font-size: 10px;
+}
+#scanVideo {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #111;
+  margin-bottom: 10px;
+}
+.scanFile {
+  margin: 12px 0;
+}
+.scanFile input {
+  margin-bottom: 0;
+}
+.claimCard {
+  padding: 16px;
+  margin: 15px 0 0;
+  background: var(--surface-alt);
+}
+.claimCard p {
+  font-size: 12px;
+}
+.claimCard button {
+  width: 100%;
+}
+.reportFilters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.reportFilters button {
+  align-self: end;
+  margin-bottom: 12px;
+}
+.reportDetail {
+  max-width: 900px;
+  padding: 12px;
+}
+.reportDetail h3 {
+  margin-top: 20px;
+  color: var(--accent);
+}
+.reportDetail p {
+  font-size: 12px;
+}
+.reportTimeline {
+  list-style: none;
+  padding-left: 0;
+}
+.reportTimeline li {
+  position: relative;
+  padding: 0 0 20px 22px;
+  border-left: 2px solid var(--border);
+  margin-left: 5px;
+}
+.reportTimeline li::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 4px;
+  height: 8px;
+  width: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.reportTimeline span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+@media (max-width: 850px) {
+  .reportFilters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .reportFilters button {
+    grid-column: 1/-1;
+  }
+  .fleetSection {
+    padding: 18px;
+  }
+  #driverMap {
+    height: 270px;
+  }
+}
+@media (max-width: 600px) {
+  .fleetSection {
+    padding: 14px;
+  }
+  .fleetSection .boardHeading {
+    align-items: flex-start;
+  }
+  .fleetSection .boardHeading h2 {
+    font-size: 17px;
+  }
+  .fleetSection .boardHeading p {
+    font-size: 10px;
+  }
+  .driverConsole {
+    padding: 18px;
+  }
+  .driverConsole h2 {
+    font-size: 19px;
+  }
+  .driverConsole .row {
+    align-items: flex-start;
+  }
+  .driverConsole .row > button {
+    width: 100%;
+  }
+  .driverCounters {
+    font-size: 10px;
+  }
+  .driverCounters strong {
+    font-size: 22px;
+  }
+  .reportFilters {
+    gap: 8px;
+  }
+  .reportFilters label {
+    font-size: 11px;
+  }
+  #driverMap {
+    height: 240px;
+  }
+  .fleetMapHeading {
+    font-size: 9px;
+  }
+  .fleetMapHeading button {
+    font-size: 9px;
+  }
+  .mapNotice,
+  .fleetDefinitions {
+    font-size: 9px;
+  }
+}

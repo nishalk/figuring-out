@@ -36,6 +36,15 @@ const fs = require("node:fs"),
     const context = await browser.newContext({
       viewport: { width: 412, height: 915 },
     });
+    await context.route("https://tile.openstreetmap.org/**", (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1X8AAAAASUVORK5CYII=",
+          "base64",
+        ),
+      }),
+    );
     const page = await context.newPage();
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -49,7 +58,7 @@ const fs = require("node:fs"),
       .waitFor();
     await page.getByRole("link", { name: "Try the sample-data demo" }).click();
     await page.getByRole("heading", { name: "Order board" }).waitFor();
-    assert.equal(await page.locator("#orderList > section").count(), 3);
+    assert.equal(await page.locator("#orderList > section").count(), 4);
     assert.equal(
       await page
         .getByRole("link", { name: "Suggest an improvement" })
@@ -96,7 +105,7 @@ const fs = require("node:fs"),
     await page
       .getByRole("button", { name: "Clear filters", exact: true })
       .click();
-    assert.equal(await page.locator("#orderList > section:visible").count(), 3);
+    assert.equal(await page.locator("#orderList > section:visible").count(), 4);
     await page.locator('[data-status="Out for delivery"]').click();
     assert.equal(await page.locator("#orderList > section:visible").count(), 1);
     assert.equal(
@@ -206,6 +215,128 @@ const fs = require("node:fs"),
       await order().locator(".badge").filter({ hasText: "Delivered" }).count(),
       1,
     );
+    // Scan an actual Code 128 image, claim a ready order, and start the driver's trip.
+    await page.locator("#demoRole").selectOption("demo-driver2");
+    await page
+      .getByRole("button", { name: "Scan / claim AWB", exact: true })
+      .click();
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        throw new DOMException("Permission denied", "NotAllowedError");
+      };
+    });
+    await page
+      .getByRole("button", { name: "Open camera", exact: true })
+      .click();
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Camera could not open" })
+      .waitFor();
+    const barcode = await context.request.get(
+      url + "/demo/barcode/DEMO-KW-1004",
+    );
+    await page.locator("#scanImage").setInputFiles({
+      name: "awb.png",
+      mimeType: "image/png",
+      buffer: await barcode.body(),
+    });
+    await page
+      .getByRole("button", { name: "Claim delivery", exact: true })
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Claim delivery", exact: true })
+      .click();
+    const claimed = () =>
+      page.locator("#orderList > section").filter({ hasText: "SAMPLE-1004" });
+    await claimed()
+      .getByRole("button", { name: "Start delivery trip", exact: true })
+      .click();
+    for (const check of await page.locator("#dispatchItems input").all())
+      await check.check();
+    await page
+      .getByRole("button", { name: "Dispatch complete order", exact: true })
+      .click();
+    await claimed()
+      .getByRole("button", { name: "Arrived at delivery", exact: true })
+      .waitFor();
+    await claimed()
+      .getByRole("button", { name: "Arrived at delivery", exact: true })
+      .click();
+    await page.locator("#demoRole").selectOption("demo-admin");
+    await page
+      .getByRole("heading", { name: "Fleet control", exact: true })
+      .waitFor();
+    const fleetRow = () =>
+      page
+        .locator("#fleetTable tbody tr")
+        .filter({ hasText: "Sample Driver Two" });
+    assert.ok(
+      (await fleetRow().locator("td").nth(3).textContent()).includes(
+        "1 in transit",
+      ),
+    );
+    assert.equal(await page.locator(".driverMarker").count(), 2);
+    await page.getByRole("button", { name: "Reports", exact: true }).click();
+    await page
+      .getByRole("heading", {
+        name: "Order history & delivery reports",
+        exact: true,
+      })
+      .waitFor();
+    await page
+      .locator("#reportFilters select[name=driver]")
+      .selectOption("demo-driver2");
+    await page
+      .getByRole("button", { name: "Apply filters", exact: true })
+      .click();
+    await page.waitForFunction(
+      () => document.querySelectorAll("[data-report-detail]").length === 1,
+    );
+    await page
+      .getByRole("button", { name: "View history", exact: true })
+      .click();
+    await page
+      .getByRole("heading", { name: "Pickup details", exact: true })
+      .waitFor();
+    await page
+      .getByRole("heading", { name: "Order history", exact: true })
+      .waitFor();
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("button", { name: "Export CSV (demo)", exact: true })
+      .click();
+    assert.ok((await download).suggestedFilename().endsWith(".csv"));
+    await page.locator("#demoRole").selectOption("demo-driver2");
+    await claimed()
+      .getByRole("button", { name: "Record delivery", exact: true })
+      .click();
+    await page
+      .locator("#proofForm input[name=name]")
+      .fill("Scanned order receiver");
+    for (const check of await page.locator("#proofItems input").all())
+      await check.check();
+    const secondCanvas = await page.locator("canvas").boundingBox();
+    await page.mouse.move(secondCanvas.x + 15, secondCanvas.y + 55);
+    await page.mouse.down();
+    await page.mouse.move(secondCanvas.x + 110, secondCanvas.y + 45, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    await page.getByRole("button", { name: "Save proof", exact: true }).click();
+    await page.locator("#proof").waitFor({ state: "hidden" });
+    await page.locator("#demoRole").selectOption("demo-admin");
+    await page
+      .getByRole("heading", { name: "Fleet control", exact: true })
+      .waitFor();
+    assert.ok(
+      (await fleetRow().locator("td").nth(3).textContent()).includes(
+        "0 in transit",
+      ),
+    );
+    assert.equal(
+      (await fleetRow().locator("td").nth(5).textContent()).trim(),
+      "1",
+    );
     // A removable item row and a successful create return the operator to the board.
     await page
       .getByRole("button", { name: "New order / Excel", exact: true })
@@ -271,8 +402,56 @@ const fs = require("node:fs"),
       path: path.join(os.tmpdir(), "relay-demo-mobile.png"),
       fullPage: true,
     });
+    // Polls update the fleet while preserving a focused order-search field.
+    const pollingPage = await context.newPage();
+    await pollingPage.clock.install();
+    await pollingPage.goto(url + "/demo");
+    await pollingPage
+      .getByRole("heading", { name: "Fleet control", exact: true })
+      .waitFor();
+    await pollingPage
+      .getByRole("searchbox", { name: "Search orders" })
+      .fill("SAMPLE-1004");
+    await pollingPage.evaluate(async () => {
+      const sample = (await relayDemo.request("state")).orders.find(
+        (o) => o.awb === "DEMO-KW-1004",
+      );
+      await relayDemo.request("orders/" + sample.id + "/action", {
+        action: "assign",
+        driver: "demo-driver2",
+      });
+      await relayDemo.request("orders/" + sample.id + "/action", {
+        action: "Out for delivery",
+        verifiedItems: sample.items.map((i) => i.id),
+      });
+    });
+    await pollingPage.clock.fastForward(15000);
+    await pollingPage.waitForFunction(() =>
+      [...document.querySelectorAll("#fleetTable tbody tr")].some(
+        (row) =>
+          row.textContent.includes("Sample Driver Two") &&
+          row.querySelectorAll("td")[3].textContent.includes("1 in transit"),
+      ),
+    );
+    assert.equal(
+      await pollingPage
+        .getByRole("searchbox", { name: "Search orders" })
+        .inputValue(),
+      "SAMPLE-1004",
+    );
+    await pollingPage
+      .getByRole("heading", { name: "Order board", exact: true })
+      .click();
+    await pollingPage.clock.fastForward(15000);
+    await pollingPage.waitForFunction(
+      () =>
+        document.querySelector(
+          '#orderList section[data-id="demo-order-3"] .orderTop .badge',
+        ).textContent === "Out for delivery",
+    );
+    await pollingPage.close();
     console.log(
-      "Browser smoke passed: persistent light/dark/system themes, responsive desktop/mobile layouts, order search/filter/sort, empty states, error notifications, role navigation and complete delivery workflow.",
+      "Browser smoke passed: persistent light/dark/system themes, themes, responsive layouts, barcode image scanning, driver claims/trips, map workload counts, report history/export, foreground location controls and automatic dashboard refresh.",
     );
   } finally {
     if (browser) await browser.close();

@@ -5,7 +5,10 @@
     content="width=device-width, initial-scale=1"
   /><title>Relay · Kuwait Delivery</title>
   <script src="/theme.js"></script>
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/assets/leaflet/leaflet.css" /><link
+    rel="stylesheet"
+    href="/style.css"
+  />
   <body>
     <header class="topbar">
       <a class="brand" href="/" aria-label="Relay home"
@@ -100,6 +103,47 @@
       <button id="printLabel">Print</button
       ><button data-close="label">Close</button>
     </dialog>
+    <dialog id="scanDialog">
+      <div class="row">
+        <h2>Scan an AWB</h2>
+        <button type="button" class="ghost" id="closeScanner">Close</button>
+      </div>
+      <p>
+        Scan the barcode or enter its number. Review the pickup or delivery
+        before claiming it.
+      </p>
+      <video
+        id="scanVideo"
+        autoplay
+        muted
+        playsinline
+        hidden
+        aria-label="AWB camera preview"
+      ></video
+      ><button id="startCamera" type="button">Open camera</button
+      ><label class="scanFile"
+        >Or scan an image<input
+          id="scanImage"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+      /></label>
+      <form id="awbLookup">
+        <label
+          >AWB number<input
+            name="awb"
+            id="scanAwb"
+            required
+            maxlength="80"
+            autocomplete="off"
+            placeholder="KW-…" /></label
+        ><button>Find order</button>
+      </form>
+      <div id="claimPreview" aria-live="polite"></div>
+    </dialog>
+    <script src="/assets/leaflet/leaflet.js"></script>
+    <script src="/assets/zxing.js"></script>
+    <script src="/operations.js"></script>
+    <script src="/dispatch-ui.js"></script>
     <script src="/demo.js"></script>
     <script src="/app.js"></script>
   </body>

@@ -60,6 +60,32 @@
         ],
       }),
     );
+    const extra = clone(orders[1]);
+    extra.id = "demo-order-3";
+    extra.awb = "DEMO-KW-1004";
+    extra.reference = "SAMPLE-1004";
+    extra.driver = null;
+    extra.pickups.forEach((p, i) => {
+      p.driver = null;
+      p.id = "demo-pickup-3-" + i;
+    });
+    extra.items.forEach((item, i) => (item.id = "demo-item-3-" + i));
+    orders.push(extra);
+    users.push({
+      id: "demo-driver2",
+      name: "Sample Driver Two",
+      role: "driver",
+    });
+    for (const [i, u] of users.filter((u) => u.role === "driver").entries()) {
+      u.locationSharing = true;
+      u.lastLocation = {
+        lat: 29.3759 - i * 0.0384,
+        lng: 47.9774 + i * 0.0477,
+        accuracy: 15,
+        at: new Date().toISOString(),
+        source: "demo",
+      };
+    }
     return { users, vendors, orders, userId: "demo-admin" };
   }
   let data;
@@ -68,6 +94,13 @@
   } catch {
     data = fresh();
   }
+  if (!data.users.some((u) => u.id === "demo-driver2"))
+    data.users.push({
+      id: "demo-driver2",
+      name: "Sample Driver Two",
+      role: "driver",
+    });
+  for (const order of data.orders) RelayOperations.normaliseTrips(order);
   const persist = () => sessionStorage.setItem(key, JSON.stringify(data));
   const current = () => data.users.find((u) => u.id === data.userId);
   function fail(message) {
@@ -109,7 +142,99 @@
             o.pickups.some((p) => p.driver === current().id),
         ),
         storageBackend: "demo",
+        fleet: ["admin", "operations"].includes(current().role)
+          ? RelayOperations.fleet(data.users, data.orders)
+          : undefined,
       });
+    if (url.startsWith("reports")) {
+      assertManager();
+      const filters = Object.fromEntries(
+        new URL("https://demo.local/" + url).searchParams,
+      );
+      return {
+        orders: RelayOperations.report(data.orders, data.users, filters),
+        generatedAt: new Date().toISOString(),
+      };
+    }
+    if (url.startsWith("driver/")) {
+      if (current().role !== "driver") fail("Driver access required");
+      if (url.startsWith("driver/lookup")) {
+        const awb = new URL("https://demo.local/" + url).searchParams
+          .get("awb")
+          ?.trim()
+          .toUpperCase();
+        const o = data.orders.find((o) => o.awb === awb);
+        if (!o) fail("No available order matches that AWB.");
+        const pickups = o.pickups.filter(
+          (p) =>
+            !p.completed &&
+            (!p.driver || p.driver === current().id) &&
+            ["Created", "Picked up"].includes(o.status),
+        );
+        const deliveryAvailable =
+          o.status === "At warehouse" &&
+          o.items.every((i) => i.received) &&
+          (!o.driver || o.driver === current().id);
+        if (!pickups.length && !deliveryAvailable)
+          fail("This order is not available to claim.");
+        return clone({
+          id: o.id,
+          awb: o.awb,
+          reference: o.reference,
+          status: o.status,
+          recipient: o.recipient,
+          address: o.address,
+          items: o.items.map((i) => ({
+            id: i.id,
+            name: i.name,
+            quantity: i.quantity,
+            vendor: i.vendor.name,
+          })),
+          pickups: pickups.map((p) => ({
+            id: p.id,
+            name: p.vendor.name,
+            address: p.vendor.address,
+          })),
+          deliveryAvailable,
+        });
+      }
+      if (url === "driver/claim") {
+        const o = data.orders.find(
+          (o) => o.awb === b.awb?.trim().toUpperCase(),
+        );
+        if (!o) fail("No available order matches that AWB.");
+        RelayOperations.claimOrder(o, current().id, b.leg, b.pickupId);
+        o.history.push({
+          event: "Driver claimed " + b.leg,
+          by: current().name,
+          actorId: current().id,
+          pickup: b.pickupId,
+          at: new Date().toISOString(),
+        });
+        persist();
+        return clone(o);
+      }
+      if (url === "driver/location") {
+        if (
+          !Number.isFinite(b.lat) ||
+          !Number.isFinite(b.lng) ||
+          !Number.isFinite(b.accuracy) ||
+          Math.abs(b.lat) > 90 ||
+          Math.abs(b.lng) > 180
+        )
+          fail("Valid GPS coordinates required");
+        current().lastLocation = {
+          ...b,
+          at: new Date().toISOString(),
+          source: "demo",
+        };
+        current().locationSharing = true;
+      } else if (url === "driver/sharing")
+        current().locationSharing = Boolean(b.enabled);
+      else fail("Unknown driver action");
+      persist();
+      return { ok: true };
+    }
     if (url === "logout") {
       data.userId = "demo-admin";
       persist();
@@ -178,7 +303,55 @@
       const manager = ["admin", "operations"].includes(current().role),
         assigned = current().role === "driver" && o.driver === current().id;
       const t = o.pickups.find((p) => p.id === b.pickup);
-      if (b.action === "assign") {
+      RelayOperations.normaliseTrips(o);
+      const at = new Date().toISOString();
+      if (
+        ["start-pickup-trip", "arrived-pickup", "pickup-failed"].includes(
+          b.action,
+        )
+      ) {
+        if (!t || (!manager && t.driver !== current().id))
+          fail("Assigned pickup driver access required");
+        if (b.action === "start-pickup-trip")
+          RelayOperations.startPickup(
+            o,
+            t.id,
+            t.driver,
+            crypto.randomUUID(),
+            at,
+          );
+        else {
+          const trip = RelayOperations.activeTrips(o).find(
+            (t2) => t2.kind === "pickup" && t2.pickupId === t.id,
+          );
+          if (!trip) fail("Start the pickup trip first");
+          if (b.action === "arrived-pickup") {
+            trip.milestone = "Arrived at pickup";
+            trip.arrivedAt = at;
+          } else {
+            if (!b.reason?.trim()) fail("A pickup failure reason is required");
+            RelayOperations.finishTrip(
+              o,
+              "pickup",
+              t.id,
+              "Failed",
+              at,
+              b.reason,
+            );
+            t.lastFailure = b.reason;
+          }
+        }
+      } else if (b.action === "arrived-delivery") {
+        if (!manager && !assigned)
+          fail("Assigned delivery driver access required");
+        if (o.status !== "Out for delivery")
+          fail("Start the delivery trip first");
+        const trip = RelayOperations.activeTrips(o).find(
+          (t) => t.kind === "delivery",
+        );
+        trip.milestone = "Arrived at delivery";
+        trip.arrivedAt = at;
+      } else if (b.action === "assign") {
         assertManager();
         o.driver = driver(b.driver);
       } else if (b.action === "assign-pickup") {
@@ -198,7 +371,14 @@
             .some((i) => !b.verifiedItems.includes(i.id))
         )
           fail("Verify all pickup items and add handover details");
+        if (
+          current().role === "driver" &&
+          !RelayOperations.activeTrips(o).some((trip) => trip.pickupId === t.id)
+        )
+          fail("Start the pickup trip first");
         t.completed = true;
+        t.proof = { ...b, at };
+        RelayOperations.finishTrip(o, "pickup", t.id, "Completed", at);
         (o.proofs ??= []).push({
           ...b,
           stage: "Vendor pickup",
@@ -243,7 +423,14 @@
           o.items.some((i) => !i.received || !b.verifiedItems?.includes(i.id))
         )
           fail("All items must be received, assigned and verified");
+        if (
+          o.deliveryDate &&
+          o.deliveryDate >
+            new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10)
+        )
+          fail("Scheduled delivery date has not arrived");
         o.status = "Out for delivery";
+        RelayOperations.startDelivery(o, crypto.randomUUID(), at);
       } else if (b.action === "Delivered") {
         if (!manager && !assigned) fail("Assigned driver access required");
         if (
@@ -254,6 +441,7 @@
         )
           fail("Delivery requires recipient name, signature and photo");
         o.status = "Delivered";
+        RelayOperations.finishTrip(o, "delivery", null, "Completed", at);
         (o.proofs ??= []).push({
           ...b,
           stage: "Delivered",
@@ -263,6 +451,7 @@
         if (!manager && !assigned) fail("Assigned driver access required");
         if (o.status !== "Out for delivery" || !b.reason?.trim())
           fail("Enter a reason for this dispatched order");
+        RelayOperations.finishTrip(o, "delivery", null, "Failed", at, b.reason);
         o.status = "Delivery failed";
         o.returned = false;
         (o.attempts ??= []).push({
@@ -306,7 +495,10 @@
     option.selected = data.userId === u.id;
     select.append(option);
   }
-  select.onchange = () => {
+  select.onchange = async () => {
+    try {
+      await stopLocationSharing();
+    } catch {}
     data.userId = select.value;
     persist();
     location.reload();

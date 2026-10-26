@@ -13,6 +13,7 @@ const {
 const bwipjs = require("bwip-js");
 const path = require("node:path");
 const { createStorage } = require("./storage");
+const operations = require("./public/operations");
 async function main() {
   const store = createStorage();
   const all = (kind) => store.all(kind);
@@ -118,6 +119,7 @@ async function main() {
       roles.includes(q.user.role)
         ? n()
         : r.status(403).json({ error: "Access denied" });
+  require("./operational-routes")(app, store, permit);
   app.get("/api/state", async (q, r) => {
     const orders = (await all("orders"))
       .map((o) => {
@@ -141,6 +143,9 @@ async function main() {
       users,
       vendors: q.user.role === "driver" ? [] : await all("vendors"),
       orders,
+      fleet: ["admin", "operations"].includes(q.user.role)
+        ? operations.fleet(await all("users"), orders)
+        : undefined,
     });
   });
   app.post("/api/users", permit("admin"), async (q, r) => {
@@ -344,8 +349,71 @@ async function main() {
         return d.id;
       };
       const deny = () => r.status(403).json({ error: "Access denied" });
+      operations.normaliseTrips(o);
+      const at = new Date().toISOString();
       let detail = {};
-      if (action === "assign") {
+      if (
+        ["start-pickup-trip", "arrived-pickup", "pickup-failed"].includes(
+          action,
+        )
+      ) {
+        const task = pickups.find((p) => p.id === q.body.pickup);
+        if (
+          !task ||
+          (!manager && (q.user.role !== "driver" || task.driver !== q.user.id))
+        )
+          return deny();
+        if (!task.driver || task.completed)
+          throw Error("An assigned, incomplete pickup is required.");
+        if (action === "start-pickup-trip") {
+          const trip = operations.startPickup(
+            o,
+            task.id,
+            task.driver,
+            crypto.randomUUID(),
+            at,
+          );
+          detail = { tripId: trip.id, pickup: task.id };
+        } else {
+          const trip = operations
+            .activeTrips(o)
+            .find((t) => t.kind === "pickup" && t.pickupId === task.id);
+          if (!trip) throw Error("Start the pickup trip first.");
+          if (action === "arrived-pickup") {
+            trip.milestone = "Arrived at pickup";
+            trip.arrivedAt = at;
+          } else {
+            if (typeof q.body.reason !== "string" || !q.body.reason.trim())
+              throw Error("A pickup failure reason is required.");
+            operations.finishTrip(
+              o,
+              "pickup",
+              task.id,
+              "Failed",
+              at,
+              q.body.reason.trim(),
+            );
+            task.lastFailure = q.body.reason.trim();
+          }
+          detail = {
+            tripId: trip.id,
+            pickup: task.id,
+            reason: q.body.reason?.trim(),
+          };
+        }
+      } else if (action === "arrived-delivery") {
+        if (!manager && (q.user.role !== "driver" || o.driver !== q.user.id))
+          return deny();
+        if (o.status !== "Out for delivery")
+          throw Error("Start the delivery trip first.");
+        const trip = operations
+          .activeTrips(o)
+          .find((t) => t.kind === "delivery");
+        if (!trip) throw Error("No active delivery trip.");
+        trip.milestone = "Arrived at delivery";
+        trip.arrivedAt = at;
+        detail = { tripId: trip.id };
+      } else if (action === "assign") {
         if (!manager) return deny();
         if (["Delivered", "Out for delivery"].includes(o.status))
           throw Error("Cannot reassign during or after delivery");
@@ -354,6 +422,14 @@ async function main() {
         if (!manager) return deny();
         const task = pickups.find((p) => p.id === q.body.pickup);
         if (!task || task.completed) throw Error("Choose an incomplete pickup");
+        if (
+          operations
+            .activeTrips(o)
+            .some((t) => t.kind === "pickup" && t.pickupId === task.id)
+        )
+          throw Error(
+            "Finish or fail the active pickup trip before reassigning.",
+          );
         task.driver = await driver();
         detail = { pickup: task.id };
       } else if (action === "pickup") {
@@ -375,7 +451,24 @@ async function main() {
           ids.some((id) => !q.body.verifiedItems.includes(id))
         )
           throw Error("Verify every item for this vendor");
-        const proof = validateProof(q.body);
+        if (
+          q.user.role === "driver" &&
+          !operations
+            .activeTrips(o)
+            .some(
+              (t) =>
+                t.kind === "pickup" &&
+                t.pickupId === task.id &&
+                t.driver === q.user.id,
+            )
+        )
+          throw Error("Start the pickup trip first.");
+        const proof = {
+          ...validateProof(q.body),
+          driverId: task.driver,
+          capturedBy: q.user.name,
+        };
+        operations.finishTrip(o, "pickup", task.id, "Completed", at);
         task.completed = true;
         task.proof = proof;
         (o.proofs ??= []).push({
@@ -439,6 +532,14 @@ async function main() {
           throw Error("Only dispatched deliveries can fail");
         if (typeof q.body.reason !== "string" || !q.body.reason.trim())
           throw Error("Failure reason required");
+        operations.finishTrip(
+          o,
+          "delivery",
+          null,
+          "Failed",
+          at,
+          q.body.reason.trim(),
+        );
         o.status = "Delivery failed";
         o.returned = false;
         (o.attempts ??= []).push({
@@ -484,16 +585,25 @@ async function main() {
         )
           throw Error("Verify every item before departure");
         o = transition(o, action);
+        const trip = operations.startDelivery(o, crypto.randomUUID(), at);
+        detail = { tripId: trip.id };
       } else if (action === "Delivered") {
         if (!manager && (q.user.role !== "driver" || o.driver !== q.user.id))
           return deny();
-        const proof = validateProof(q.body, true);
+        const proof = {
+          ...validateProof(q.body, true),
+          driverId: o.driver,
+          capturedBy: q.user.name,
+        };
         o = transition(o, action);
+        operations.finishTrip(o, "delivery", null, "Completed", at);
         (o.proofs ??= []).push({ ...proof, stage: action });
       } else throw Error("Unknown action");
       o.history.push({
         event: action,
         by: q.user.name,
+        actorId: q.user.id,
+        driverId: o.driver,
         at: new Date().toISOString(),
         ...detail,
       });
@@ -505,8 +615,9 @@ async function main() {
   app.use((e, q, r, n) => r.status(e.status || 400).json({ error: e.message }));
   // Persist stable pickup identifiers for orders created before vendor tasks existed.
   for (const order of await all("orders")) {
-    if (!order.pickups) {
+    if (!order.pickups || !order.trips) {
       pickupTasks(order);
+      operations.normaliseTrips(order);
       await save("orders", order);
     }
   }
