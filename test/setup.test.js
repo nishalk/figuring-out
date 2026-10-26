@@ -67,7 +67,7 @@ test(
       assert.equal((await setup({ ...body, setupKey: key })).status, 200);
       assert.equal((await setup({ ...body, setupKey: key })).status, 409);
       assert.equal(
-        (await fetch(url + "/").then((r) => r.text())).includes("Relay"),
+        (await fetch(url + "/").then((r) => r.text())).includes("Mawada"),
         true,
       );
       await stop();

@@ -1826,3 +1826,261 @@ canvas {
 .driverProfile {
   scroll-margin-top: 24px;
 }
+
+/* Mawada palette and ribbon language, from the supplied April 2024 guide. */
+:root {
+  font-family: "Attila Sans Classic", "Segoe UI", sans-serif;
+  --bg: #fcf6f2;
+  --surface: #fff;
+  --surface-alt: #f7f2fa;
+  --text: #37172f;
+  --muted: #796474;
+  --border: #e8dce5;
+  --accent: #5f174b;
+  --accent-hover: #7c2464;
+  --accent-soft: #ebe6ff;
+  --focus: #87316d;
+  --shadow: 0 8px 32px #5f174b09;
+}
+:root[data-theme="dark"] {
+  --bg: #1d1420;
+  --surface: #2a1e2c;
+  --surface-alt: #342437;
+  --text: #fcf6f2;
+  --muted: #c7b5c7;
+  --border: #50384f;
+  --accent: #e2b8d7;
+  --accent-hover: #f0d1e9;
+  --accent-soft: #453049;
+  --button-text: #37172f;
+  --focus: #e2b8d7;
+}
+.workspaceSidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.workspaceName {
+  color: var(--accent);
+}
+.brandMark {
+  background: #5f174b;
+  color: white;
+  border-radius: 50% 50% 16% 50%;
+}
+.stat,
+.orderCard,
+.driverConsole {
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+.stat {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.stat:hover,
+.pulseCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 25px #5f174b14;
+}
+.mawadaHero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 36px;
+  background: #ebe6ff;
+  color: #5f174b;
+  border-radius: 26px;
+  margin: 0 0 20px;
+  isolation: isolate;
+}
+.heroCopy {
+  position: relative;
+  z-index: 1;
+}
+.mawadaHero h2 {
+  color: #5f174b;
+  font-size: clamp(30px, 3.4vw, 48px);
+  letter-spacing: -1.8px;
+  font-weight: 500;
+  line-height: 1.08;
+  margin: 16px 0;
+}
+.mawadaHero p {
+  margin-bottom: 20px;
+}
+.heroDate {
+  display: inline-block;
+  border: 1px solid #5f174b30;
+  border-radius: 30px;
+  padding: 7px 12px;
+  font-size: 11px;
+}
+.ribbonArt {
+  position: absolute;
+  border: 25px solid #fcf6f2;
+  width: 420px;
+  height: 180px;
+  border-radius: 50%;
+  transform: rotate(-40deg);
+  top: 20px;
+  right: 90px;
+  opacity: 0.6;
+  z-index: -1;
+}
+.ribbonArt:after {
+  content: "";
+  position: absolute;
+  width: 250px;
+  height: 110px;
+  border: 18px solid #5f174b;
+  border-radius: 50%;
+  left: 80px;
+  top: 110px;
+  transform: rotate(65deg);
+  opacity: 0.17;
+}
+.deliveryProgress {
+  align-self: center;
+  text-align: center;
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+  z-index: 1;
+}
+.progressRing {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  margin: auto;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(closest-side, #ebe6ff 79%, transparent 80%),
+    conic-gradient(#5f174b var(--progress), #5f174b18 0);
+}
+.progressRing strong {
+  font-size: 31px;
+  font-weight: 500;
+}
+.deliveryProgress small {
+  opacity: 0.8;
+}
+.mawadaPulse {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.pulseCard {
+  position: relative;
+  display: grid;
+  text-align: left;
+  gap: 8px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text);
+  background: var(--surface);
+  transition: transform 0.18s;
+}
+.pulseCard strong {
+  font-size: 35px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.pulseCard small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.pulseArrow {
+  position: absolute;
+  right: 18px;
+  top: 16px;
+  color: var(--accent);
+}
+.pulse2 {
+  background: var(--accent-soft);
+}
+.mawadaWorkload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 18px 4px 24px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.monitoringSummary {
+  background: var(--surface-alt);
+}
+@media (min-width: 1100px) {
+  .fleetSection {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 0 20px;
+  }
+  #mawadaOverview,
+  .fleetSection > .boardHeading,
+  .fleetMapHeading,
+  #fleetTable,
+  #driverProfile,
+  .fleetDefinitions {
+    grid-column: 1 / -1;
+  }
+  #driverMap {
+    grid-column: 1;
+    height: 350px;
+  }
+  #fleetAlerts {
+    grid-column: 2;
+    grid-row: 4 / 6;
+    max-height: 410px;
+    overflow: auto;
+  }
+  #fleetAlerts .monitoringSummary {
+    margin-top: 0;
+  }
+  .mapNotice {
+    grid-column: 1;
+  }
+}
+@media (max-width: 700px) {
+  .mawadaHero {
+    padding: 24px;
+    gap: 12px;
+  }
+  .deliveryProgress {
+    min-width: 100px;
+    font-size: 11px;
+  }
+  .progressRing {
+    width: 90px;
+    height: 90px;
+  }
+  .progressRing strong {
+    font-size: 24px;
+  }
+  .mawadaPulse {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .pulseCard {
+    padding: 16px;
+  }
+  .pulseCard strong {
+    font-size: 28px;
+  }
+  .heroDate {
+    font-size: 9px;
+  }
+  .mawadaHero .eyebrow {
+    font-size: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat,
+  .pulseCard {
+    transition: none;
+  }
+}

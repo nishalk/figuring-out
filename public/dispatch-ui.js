@@ -44,7 +44,7 @@ function renderFleet(root) {
     }
     fleetRoot = root;
     fleetMarkers = [];
-    root.innerHTML = `<section class="fleetSection"><div class="boardHeading"><div><h2>Fleet control</h2><p class="muted">Pickup and delivery legs · refreshes every 15 seconds</p></div><button class="ghost" id="refreshFleet">Refresh fleet</button></div><div class="fleetMapHeading"><span id="fleetRefreshTime"></span><button class="ghost" id="fitDrivers">Fit driver locations</button></div><div id="driverMap" role="region" aria-label="Driver location map"></div><p class="mapNotice" id="mapNotice">Markers show last reported GPS, not guaranteed current positions. Sharing requires the driver screen to remain open.</p><div id="fleetAlerts" aria-live="polite"></div><div id="fleetTable" class="tableScroll"></div><div id="driverProfile"></div><p class="muted fleetDefinitions">Assigned = open orders with a delivery or pending pickup for that driver. Pending delivery = not dispatched. Active trips = pickup or delivery legs currently in transit.</p></section>`;
+    root.innerHTML = `<section class="fleetSection"><div id="mawadaOverview"></div><div class="boardHeading"><div><h2>Fleet control</h2><p class="muted">Pickup and delivery legs · refreshes every 15 seconds</p></div><button class="ghost" id="refreshFleet">Refresh fleet</button></div><div class="fleetMapHeading"><span id="fleetRefreshTime"></span><button class="ghost" id="fitDrivers">Fit driver locations</button></div><div id="driverMap" role="region" aria-label="Driver location map"></div><p class="mapNotice" id="mapNotice">Markers show last reported GPS, not guaranteed current positions. Sharing requires the driver screen to remain open.</p><div id="fleetAlerts" aria-live="polite"></div><div id="fleetTable" class="tableScroll"></div><div id="driverProfile"></div><p class="muted fleetDefinitions">Assigned = open orders with a delivery or pending pickup for that driver. Pending delivery = not dispatched. Active trips = pickup or delivery legs currently in transit.</p></section>`;
     $("#refreshFleet").onclick = () =>
       run(async () => {
         state = await api("state");
@@ -91,6 +91,81 @@ function renderFleet(root) {
   );
   root.querySelector("#fleetAlerts").innerHTML =
     `<section class="monitoringSummary"><h3>Operations review · ${openFlags.length} open flags</h3><p class="muted">Review signals, not findings of misconduct. Long stop: 20 min within 150 m on an active trip. GPS gap: 5 min. Jump: over 160 km/h after GPS accuracy allowance. Proof discrepancy: over 500 m from recent GPS.</p>${openFlags.map((a) => `<button class="ghost" data-driver-profile="${esc(a.driverId)}">${esc(a.driver)} · ${esc(a.kind)}</button>`).join("") || "<p>No current flags. Checks require location data; no flag does not verify activity.</p>"}</section>`;
+  const total = state.orders.length;
+  const delivered = state.orders.filter((o) => o.status === "Delivered").length;
+  const pendingPickup = state.orders
+    .flatMap((o) => o.pickups)
+    .filter((p) => !p.completed).length;
+  const active = rows.reduce((sum, d) => sum + d.activeTrips.length, 0);
+  const unassigned = state.orders.filter(
+    (o) =>
+      o.status !== "Delivered" &&
+      (!o.driver || o.pickups.some((p) => !p.completed && !p.driver)),
+  ).length;
+  const ready = state.orders.filter(
+    (o) =>
+      o.status === "At warehouse" &&
+      o.items.length &&
+      o.items.every((i) => i.received),
+  ).length;
+  root.querySelector("#mawadaOverview").innerHTML =
+    `<section class="mawadaHero"><div class="ribbonArt" aria-hidden="true"></div><div class="heroCopy"><span class="eyebrow">MAWADA · EVERY DELIVERY MATTERS</span><h2>A little care.<br>A happier arrival.</h2><p>Your Kuwait delivery day, beautifully connected.</p><span class="heroDate">${new Date().toLocaleDateString("en-GB", { timeZone: "Asia/Kuwait", weekday: "long", day: "numeric", month: "long" })} · ${window.relayDemo ? "Fictional sample data" : "All recorded orders"}</span></div><div class="deliveryProgress"><div class="progressRing" style="--progress:${total ? Math.round((delivered / total) * 100) : 0}%"><strong>${total ? Math.round((delivered / total) * 100) : 0}%</strong></div><span>Delivery completion</span><small>${delivered} delivered / ${total} orders</small></div></section><div class="mawadaPulse">${[
+      {
+        label: "Shipments",
+        value: total,
+        detail: "Across all recorded orders",
+        status: "",
+      },
+      {
+        label: "On the move",
+        value: active,
+        detail: "Active pickup & delivery legs",
+        status: "Out for delivery",
+      },
+      {
+        label: "Ready to delight",
+        value: ready,
+        detail: "All items at the warehouse",
+        status: "At warehouse",
+      },
+      {
+        label: "Needs attention",
+        value: openFlags.length,
+        detail: unassigned + " orders with unassigned work",
+        status: null,
+      },
+    ]
+      .map(
+        (k, i) =>
+          `<button class="pulseCard pulse${i}" data-pulse="${i}"><span>${k.label}</span><strong>${k.value}</strong><small>${k.detail}</small><span class="pulseArrow" aria-hidden="true">↗</span></button>`,
+      )
+      .join(
+        "",
+      )}</div><div class="mawadaWorkload"><span><i class="liveDot"></i> ${rows.length} drivers in your team</span><span>${pendingPickup} pickups pending</span><span>${unassigned} orders need assignment</span><span>${openFlags.length} location flags to review</span></div>`;
+  root.querySelectorAll("[data-pulse]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const index = Number(b.dataset.pulse);
+        if (index === 3) {
+          root
+            .querySelector("#fleetAlerts")
+            .scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        if (index === 1) {
+          root
+            .querySelector("#fleetTable")
+            .scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        statusFilter = index === 2 ? "At warehouse" : "";
+        searchQuery = "";
+        orders(document.querySelector("#content"));
+        document
+          .querySelector("#content")
+          .scrollIntoView({ behavior: "smooth", block: "start" });
+      }),
+  );
   const oldCount = fleetMarkers.length;
   if (fleetMap) fleetMarkers.forEach((m) => m.remove());
   fleetMarkers = [];
