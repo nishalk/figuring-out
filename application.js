@@ -327,6 +327,10 @@ async function main() {
       r.status(e.status || 400).json({ error: e.message });
     }
   });
+  app.post("/api/demo-orders", permit("admin"), async (q, r) => {
+    const result = await require("./demo-orders")(store, prepareOrder, q.user);
+    r.json(result);
+  });
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },

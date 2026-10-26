@@ -333,6 +333,20 @@ test(
         403,
       );
       assert.equal((await req(restricted, "state")).fleet, undefined);
+      await req(winner, "demo-orders", {}, 403);
+      const seeded = await req(admin, "demo-orders", {});
+      assert.equal(seeded.created, 24);
+      assert.equal((await req(admin, "demo-orders", {})).created, 0);
+      const examples = (await req(admin, "state")).orders.filter(
+        (o) => o.demoData,
+      );
+      assert.equal(examples.length, 24);
+      assert.ok(
+        examples.some(
+          (o) => o.status === "Delivered" && o.proofs.some((p) => p.simulated),
+        ),
+      );
+      assert.ok(examples.some((o) => o.pickups.length === 2));
     } finally {
       if (child.exitCode === null) {
         const done = new Promise((r) => child.once("exit", r));

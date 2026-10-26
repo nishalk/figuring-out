@@ -312,6 +312,18 @@ function users(c) {
 
 function create(c) {
   c.innerHTML = `<section><h2>Create order</h2><form id="order"><div class="grid">${field("reference", "Your order reference")}${field("recipient", "Recipient name")}${field("phone", "Phone (+965 followed by 8 digits)")}${field("address", "Delivery address")}</div><h3>Items and pickups</h3><div id="items"></div><button type="button" id="add">Add item</button><button>Create order</button></form></section><section><h2>Upload Excel (.xlsx)</h2><label>Export format<select id="importFormat"><option value="mawada">Mawada CMS · deliveries due today (Kuwait)</option><option value="template">Mawada item-row template</option></select></label><p>Mawada: use named columns for Order Number, Recipient Delivery Date, Recipient Name, Recipient Phone, Recipient Address, Vendor Name, Item Details and Quantity. Only deliveries due today in Kuwait are selected. Use one row per item. For the Mawada template, use reference, recipient, phone, address, vendorCode, name, quantity in that order.</p><input id="excel" type="file" accept=".xlsx"><button id="preview">Validate and preview</button><div id="previewResult"></div></section>`;
+  if (state.user.role === "admin" && !window.relayDemo) {
+    c.insertAdjacentHTML(
+      "afterbegin",
+      `<section class="chartCard"><div class="eyebrow">PRESENTATION READY</div><h2>Load fictional demo orders</h2><p>Add 24 clearly labelled orders for yesterday, today and tomorrow, two fictional vendors and three sample drivers. Includes pending pickups, warehouse-ready orders, active deliveries, completed deliveries and late examples. No customer messages are sent. Sample drivers do not have login credentials.</p><button id="loadDemoOrders">Load demo orders</button><p>Existing orders are kept. Repeating this on the same day does not duplicate the sample orders.</p></section>`,
+    );
+    c.querySelector("#loadDemoOrders").onclick = () =>
+      run(async () => {
+        const result = await api("demo-orders", {});
+        view = "dashboard";
+        await refresh(result.created + " fictional demo orders added");
+      });
+  }
   const updateRemove = () =>
     document
       .querySelectorAll(".removeItem")
@@ -410,6 +422,7 @@ function orders(c) {
  ${orderDeliveryNotes(o)}
  ${journey(o)}
  <div class="orderActionRow"><span class="nextStep">${icon(o.status === "Delivered" ? "check" : "clock")}${esc(nextStep(o))}</span>${button(o, "label", "Print AWB label")}</div>
+ ${o.demoData ? '<p class="demoAccountNotice">FICTIONAL DEMO · simulated milestones/proof · do not dispatch</p>' : ""}
  <details class="orderWorkflow" ${selectedOrder === o.id ? "open" : ""}><summary><span>${icon("orders")} Manage workflow</span><span>${o.items.filter((i) => i.received).length}/${o.items.length} items received</span></summary><div class="orderBody">
  <p class="assignmentLabel">Delivery driver: ${esc(state.users.find((u) => u.id === o.driver)?.name || (o.driver ? "Assigned" : "Unassigned"))}${o.deliveryDate ? " · Scheduled " + esc(o.deliveryDate) : ""}</p>
  <h3>Vendor pickups</h3>${o.pickups
