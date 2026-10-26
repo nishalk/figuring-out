@@ -1,1 +1,66 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Relay · Kuwait Delivery</title><link rel="stylesheet" href="/style.css"><body><header><div><b>◈ RELAY</b><small>Kuwait delivery operations</small></div><button id="logout" hidden>Sign out</button></header><main id="app"></main><dialog id="proof"><form id="proofForm"><h2>Proof of handover</h2><label>Person’s name<input name="name" required></label><label>Photo<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required></label><p>Recipient signature</p><canvas width="320" height="150"></canvas><button type="button" id="clear">Clear signature</button><p>GPS is captured when you submit. Allow location access.</p><button>Save proof</button><button type="button" id="cancel">Cancel</button></form></dialog><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  /><title>Relay · Kuwait Delivery</title
+  ><link rel="stylesheet" href="/style.css" />
+  <body>
+    <header>
+      <div><b>◈ RELAY</b><small>Kuwait delivery operations</small></div>
+      <button id="logout" hidden>Sign out</button>
+    </header>
+    <main id="app"></main>
+    <dialog id="proof">
+      <form id="proofForm">
+        <h2>Proof of handover</h2>
+        <label>Person’s name<input name="name" required /></label
+        ><label
+          >Photo<input
+            name="photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            required
+        /></label>
+        <div id="proofItems"></div>
+        <div id="signatureArea">
+          <p>Recipient signature</p>
+          <canvas width="320" height="150"></canvas
+          ><button type="button" id="clear">Clear signature</button>
+        </div>
+        <p>GPS is captured when you submit. Allow location access.</p>
+        <button>Save proof</button
+        ><button type="button" id="cancel">Cancel</button>
+      </form>
+    </dialog>
+    <dialog id="dispatch">
+      <form id="dispatchForm">
+        <h2>Verify delivery manifest</h2>
+        <p>Check every item and quantity before departure.</p>
+        <div id="dispatchItems"></div>
+        <button>Dispatch complete order</button
+        ><button type="button" data-close="dispatch">Cancel</button>
+      </form>
+    </dialog>
+    <dialog id="failure">
+      <form id="failureForm">
+        <h2>Delivery unsuccessful</h2>
+        <label
+          >Reason<textarea
+            name="reason"
+            required
+            maxlength="1000"
+          ></textarea></label
+        ><button>Record failed attempt</button
+        ><button type="button" data-close="failure">Cancel</button>
+      </form>
+    </dialog>
+    <dialog id="label">
+      <div id="labelContent"></div>
+      <button id="printLabel">Print</button
+      ><button data-close="label">Close</button>
+    </dialog>
+    <script src="/app.js"></script>
+  </body>
+</html>

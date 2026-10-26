@@ -16,10 +16,23 @@ Operational data and proof images are stored in `data/app.db`; keep this on a pe
 
 ## Current scope and limitations
 
-Implemented: user roles, vendor address snapshots, itemized orders, Excel validation and confirmation, driver assignment/reassignment, aggregate pickup proof, warehouse item receipt, complete-order dispatch restriction, delivery photo/signature/name/GPS, audit history, and printable order references.
+Implemented: user roles, vendor address snapshots, itemized orders, Excel validation and confirmation, separate vendor pickup tasks and drivers, item verification and pickup proof per vendor, independent warehouse receipt, adding physically present warehouse items, complete-order dispatch verification, delivery photo/signature/name/GPS, Code 128 AWB labels, failed-delivery reasons, warehouse returns, rescheduling, and audit history.
 
-This is a prototype, not production-ready dispatch software. Pickup completion currently applies to the whole order: separate vendor pickup tasks/proofs still need implementation. Add-to-existing-order warehouse consolidation, barcode/QR AWB labels, failed delivery/rescheduling, customer messaging/tracking, API integrations, account recovery, rate limiting, persistent session storage, pagination, production hosting and automated backups remain outstanding. Current print action prints the order board; it is not a finished AWB layout. No public tracking URLs are exposed. Session memory resets on restart. Camera, signature usability and GPS require validation on a real Android phone over HTTPS.
+### Trial workflow
+
+1. As administrator, create operations, warehouse and driver accounts; register vendor locations.
+2. Create an order containing items from two vendors (or import Excel). Each vendor gets its own pickup task.
+3. Operations assigns pickup drivers on each task and a delivery driver separately.
+4. Each pickup driver verifies every item and captures the vendor contact name, photo and GPS. Warehouse staff can receive one vendor’s items while awaiting another vendor.
+5. Warehouse staff receive all items. Use “Add an item already at the warehouse” for physically present extras belonging to this order. This records receipt immediately; it does not create a future pickup. Existing uncollected items remain required.
+6. Print the order’s AWB label. Its Code 128 barcode encodes the AWB number, not a public tracking link. Labels include recipient details and the complete item manifest.
+7. The delivery driver checks every item before dispatch and captures recipient name, signature, photo and GPS at delivery.
+8. For a failed attempt, record a reason. Warehouse staff must confirm physical return before operations can choose a new delivery date. Rescheduling clears the delivery assignment, so assign a driver again. Future-dated orders cannot dispatch early. Dates use Kuwait time.
+
+Existing orders are migrated to stable vendor tasks on server startup. Previously completed aggregate pickups are marked historical; separate vendor proof is not invented. Historical pickup drivers use the prior order assignment where available.
+
+This is a prototype, not production-ready dispatch software. Customer messaging/tracking, API integrations, account recovery, rate limiting, persistent session storage, pagination, production hosting and automated backups remain outstanding. No public tracking URLs are exposed. Session memory resets on restart. Camera, signature usability, barcode scanning/printing and GPS require validation on real Android devices over HTTPS. Proof validation checks file signatures but is not a full image decoder.
 
 ## Tests
 
-`npm test` verifies complete-order dispatch rules. The onboarding smoke test separately exercises authentication, role access, vendor creation and the full pickup/warehouse/delivery lifecycle against an isolated temporary database.
+`npm test` verifies complete-order dispatch rules and runs an isolated API workflow covering separate vendor pickups, role restrictions, warehouse consolidation, dispatch verification, delivery failure/return/rescheduling, delivery proof, barcode generation, and real Excel preview/import/duplicate rejection. `npm run format:check` checks formatting.
