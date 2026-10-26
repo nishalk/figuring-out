@@ -135,7 +135,16 @@ async function main() {
     const users = ["admin", "operations"].includes(q.user.role)
       ? (await all("users"))
           .filter((u) => q.user.role === "admin" || u.role === "driver")
-          .map(({ password, ...u }) => u)
+          .map(
+            ({
+              password,
+              locationHistory,
+              stationary,
+              locationAlerts,
+              alertReviews,
+              ...u
+            }) => u,
+          )
       : [];
     r.json({
       user: { ...q.user, password: undefined },
@@ -527,6 +536,10 @@ async function main() {
           throw Error("Start the pickup trip first.");
         const proof = {
           ...validateProof(q.body),
+          gpsAtCapture:
+            q.user.role === "driver"
+              ? (await store.get("users", q.user.id))?.lastLocation || null
+              : null,
           driverId: task.driver,
           capturedBy: q.user.name,
         };
@@ -654,6 +667,10 @@ async function main() {
           return deny();
         const proof = {
           ...validateProof(q.body, true),
+          gpsAtCapture:
+            q.user.role === "driver"
+              ? (await store.get("users", q.user.id))?.lastLocation || null
+              : null,
           driverId: o.driver,
           capturedBy: q.user.name,
         };

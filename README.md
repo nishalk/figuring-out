@@ -78,3 +78,5 @@ No new Supabase tables or SQL changes are required: trip/history fields remain i
 ## Mawada daily import
 
 See [the reference review and import contract](docs/fareye-reference.md). Mawada uploads now have a Kuwait-today selection and exclusion preview, saved delivery instructions/value/bell/card fields, and an auditable occasion review. The actual Mawada CMS export has not been supplied yet; mapping against its real layout remains unverified. Occasion suggestions currently use transparent text rules and are marked unconfirmed, not presented as AI model results.
+
+Driver workload profiles and reviewable location signals: see [driver monitoring](docs/driver-monitoring.md). Open Fleet control → View driver to inspect shipments, pickups, trips and review notes.

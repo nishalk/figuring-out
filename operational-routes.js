@@ -88,14 +88,13 @@ module.exports = function install(app, store, permit) {
         .status(400)
         .json({ error: "Valid GPS coordinates and accuracy are required." });
     const user = await store.get("users", q.user.id);
-    user.locationSharing = true;
-    user.lastLocation = {
+    rules.recordLocation(user, {
       lat: q.body.lat,
       lng: q.body.lng,
       accuracy: q.body.accuracy,
       at: now(),
       source: "gps",
-    };
+    });
     await store.save("users", user);
     r.json({ ok: true, at: user.lastLocation.at });
   });
@@ -104,6 +103,32 @@ module.exports = function install(app, store, permit) {
       return r.status(400).json({ error: "Choose whether to share location." });
     const user = await store.get("users", q.user.id);
     user.locationSharing = q.body.enabled;
+    await store.save("users", user);
+    r.json({ ok: true });
+  });
+  app.post("/api/fleet/:id/review", manager, async (q, r) => {
+    const user = await store.get("users", q.params.id);
+    if (!user || user.role !== "driver")
+      return r.status(404).json({ error: "Driver not found" });
+    const flag = rules
+      .driverAlerts(user, await store.all("orders"))
+      .find((f) => f.id === q.body.alertId);
+    const note = String(q.body.note || "").trim();
+    if (!flag || !note || note.length > 500)
+      return r.status(400).json({
+        error:
+          "Select an existing flag and enter a review note of 1–500 characters.",
+      });
+    const reviews = Object.entries(user.alertReviews || {}).slice(-199);
+    user.alertReviews = Object.fromEntries(reviews);
+    user.alertReviews[flag.id] = {
+      note,
+      kind: flag.kind,
+      detail: flag.detail,
+      flaggedAt: flag.at,
+      by: q.user.name,
+      at: now(),
+    };
     await store.save("users", user);
     r.json({ ok: true });
   });

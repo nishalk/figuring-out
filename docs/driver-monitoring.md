@@ -1,0 +1,24 @@
+# Driver details and location review
+
+On the Order board, use Fleet control → the driver's **View driver** button. The profile shows unique shipments handled across recorded current and previous assignments, open assigned shipments, completed deliveries, awaiting-dispatch deliveries, out-for-delivery orders, failed deliveries, pending/completed pickups and active trip legs. Shipment rows include receiver/address, pickup vendors, current order status and the selected driver's trip history. Click an AWB to open the order workflow. Totals cover all recorded history, not a daily performance score. Historical assignments absent from older records cannot be reconstructed. A trip is still an individual pickup/delivery leg, not a multi-order route manifest.
+
+## Review signals
+
+Admin and operations roles see the open review queue and driver details. Drivers cannot read fleet reports or review flags. No account sanctions, order changes or accusations are triggered automatically.
+
+- **Long stop:** at least 20 minutes within 150 metres of an anchor point during an active trip, with GPS accuracy at most 100 metres, gaps between accepted samples at most two minutes, and a current fix no older than two minutes. The stationary interval starts again after movement, inaccurate fixes, a sharing pause or a tracking gap. A new active trip does not inherit an earlier idle interval. Waiting at vendors, traffic and authorised breaks can legitimately trigger this signal.
+- **Tracking gap:** active trip with sharing paused, no GPS or a fix older than five minutes. This can mean background browser suspension, phone lock, lost connectivity or disabled permissions.
+- **Location jump:** accurate fixes 10–120 seconds apart imply over 160 km/h after subtracting both accuracy radii. Coordinates and the elapsed interval are retained with the signal. Poor or discontinuous fixes do not qualify.
+- **Proof / GPS discrepancy:** pickup/delivery proof over 500 metres from an accurate GPS fix within two minutes, after allowing for GPS accuracy. The server saves its latest GPS evidence alongside newly captured driver proofs, so evidence survives the rolling GPS buffer. Missing, stale or inaccurate GPS does not establish a discrepancy. This compares device-reported positions; it cannot establish the real destination or detect every form of GPS spoofing. Verified recipient/vendor map pins are needed for destination geofencing.
+
+Each flag has a reason and time. Operations can enter a review note (1–500 characters); reviewer, time and flag description are saved. A review log remains available when a temporary stop/gap clears. Current stop/gap flags clear when their condition ends. GPS jumps and saved proof discrepancies remain available as evidence for review, rather than disappearing just because the driver moved. A later tracking-gap episode creates a fresh flag. Review entries are capped at 200 per driver and jump evidence at 100. Constants are defined in `public/operations.js`; there is no threshold settings screen yet.
+
+## Collection and limitations
+
+The browser requests a fresh fix every 30 seconds while sharing, in addition to movement callbacks. Server receive times are authoritative for stored tracking samples. The existing 15-second submission throttle remains. The driver's screen must remain open and foregrounded, with GPS permission and an internet connection. Background/locked-phone tracking needs an Android implementation; this web prototype does not offer it. The latest location on the map always has a timestamp and accuracy, and can become stale. No location or no flag means insufficient evidence, not verified driver activity.
+
+The GPS buffer is capped at 2,000 fixes per driver; samples older than 24 hours are removed on the next location update. This buffer supports monitoring checks, not route playback. Latest GPS, review records and proof evidence have separate lifetimes described above. Full internal GPS buffers are not included in the manager's general state payload. No database migration is required: the existing user/order JSON storage holds the additional fields.
+
+The isolated `/demo` contains one clearly labelled simulated jump flag. Use **Reset sample orders** if an existing demo session predates this update, then open Demo Driver and record a review note. Demo edits stay in that browser session and do not affect real drivers or the live database.
+
+Validation includes deterministic monitoring rules, role restrictions and review persistence through the API, plus browser interactions for profiles, simulated review, mobile themes, AWB claims, trips, workload counts and reports. Public map tiles are stubbed during browser tests. Live Hostinger startup, credentials, GPS devices and tile-provider availability require deployment/device verification.

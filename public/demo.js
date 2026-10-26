@@ -103,6 +103,16 @@
         source: "demo",
       };
     }
+    const demoDriver = users.find((u) => u.id === "demo-driver");
+    demoDriver.locationAlerts = [
+      {
+        id: "sample-location-jump",
+        kind: "Location jump",
+        at: new Date().toISOString(),
+        detail:
+          "SIMULATED EXAMPLE: GPS moved 4 km in 30 seconds. Review GPS accuracy and confirm with the driver. This is fictional demo data.",
+      },
+    ];
     return { users, vendors, orders, userId: "demo-admin" };
   }
   let data;
@@ -240,15 +250,36 @@
           Math.abs(b.lng) > 180
         )
           fail("Valid GPS coordinates required");
-        current().lastLocation = {
+        RelayOperations.recordLocation(current(), {
           ...b,
           at: new Date().toISOString(),
           source: "demo",
-        };
-        current().locationSharing = true;
+        });
       } else if (url === "driver/sharing")
         current().locationSharing = Boolean(b.enabled);
       else fail("Unknown driver action");
+      persist();
+      return { ok: true };
+    }
+    if (url.startsWith("fleet/") && url.endsWith("/review")) {
+      if (!["admin", "operations"].includes(current().role))
+        fail("Access denied");
+      const user = data.users.find((u) => u.id === url.split("/")[1]);
+      const flag =
+        user &&
+        RelayOperations.driverAlerts(user, data.orders).find(
+          (f) => f.id === b.alertId,
+        );
+      if (!flag || !String(b.note || "").trim()) fail("Enter a review note");
+      user.alertReviews ||= {};
+      user.alertReviews[flag.id] = {
+        note: String(b.note).slice(0, 500),
+        kind: flag.kind,
+        detail: flag.detail,
+        flaggedAt: flag.at,
+        by: current().name,
+        at: new Date().toISOString(),
+      };
       persist();
       return { ok: true };
     }

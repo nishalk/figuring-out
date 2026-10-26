@@ -114,7 +114,136 @@
       });
     return trip;
   }
-  function fleet(users, orders) {
+  const monitoring = {
+    idleMinutes: 20,
+    staleMinutes: 5,
+    radiusMetres: 150,
+    maxAccuracy: 100,
+    jumpKph: 160,
+  };
+  function distance(a, b) {
+    const rad = (n) => (n * Math.PI) / 180;
+    const x =
+      Math.sin(rad(b.lat - a.lat) / 2) ** 2 +
+      Math.cos(rad(a.lat)) *
+        Math.cos(rad(b.lat)) *
+        Math.sin(rad(b.lng - a.lng) / 2) ** 2;
+    return 6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, x)));
+  }
+  function recordLocation(user, position) {
+    const prev = user.lastLocation;
+    const at = Date.parse(position.at);
+    user.locationHistory = (user.locationHistory || [])
+      .filter((p) => at - Date.parse(p.at) <= 86400000)
+      .slice(-1999);
+    const reliable = (p) => p && p.accuracy <= monitoring.maxAccuracy;
+    const gap = prev ? at - Date.parse(prev.at) : Infinity;
+    const continuous = gap >= 10000 && gap <= 120000 && user.locationSharing;
+    user.locationAlerts = (user.locationAlerts || []).slice(-99);
+    if (continuous && reliable(prev) && reliable(position)) {
+      const metres = Math.max(
+        0,
+        distance(prev, position) - prev.accuracy - position.accuracy,
+      );
+      const kph = (metres / gap) * 3600;
+      if (kph > monitoring.jumpKph)
+        user.locationAlerts.push({
+          id: "jump-" + position.at,
+          kind: "Location jump",
+          at: position.at,
+          detail: `GPS changed ${Math.round(distance(prev, position))} m in ${Math.round(gap / 1000)} seconds (at least ${Math.round(kph)} km/h after accuracy allowance). Check GPS error or device changes.`,
+          from: prev,
+          to: position,
+        });
+    }
+    if (
+      !continuous ||
+      !reliable(prev) ||
+      !reliable(position) ||
+      !user.stationary ||
+      distance(user.stationary, position) > monitoring.radiusMetres
+    ) {
+      user.stationary = reliable(position)
+        ? { ...position, since: position.at }
+        : null;
+    }
+    user.lastLocation = position;
+    user.locationHistory.push(position);
+    user.locationSharing = true;
+  }
+  function driverAlerts(user, orders, at = Date.now()) {
+    const trips = orders.flatMap((o) =>
+      activeTrips(o).filter((t) => t.driver === user.id),
+    );
+    const latestStart = Math.max(
+      ...trips.map((t) => Date.parse(t.startedAt)).filter(Number.isFinite),
+    );
+    const flags = [...(user.locationAlerts || [])];
+    const pos = user.lastLocation;
+    const age = pos ? at - Date.parse(pos.at) : Infinity;
+    if (
+      trips.length &&
+      (!user.locationSharing || age > monitoring.staleMinutes * 60000)
+    )
+      flags.push({
+        id:
+          "gap-" +
+          (Number.isFinite(latestStart) ? latestStart : "active") +
+          "-" +
+          (pos?.at || "missing"),
+        kind: "Tracking gap",
+        at: pos?.at || null,
+        detail:
+          "Active trip with GPS paused, missing or older than 5 minutes. The browser may be closed, the phone locked or connectivity lost.",
+      });
+    const since = Math.max(Date.parse(user.stationary?.since), latestStart);
+    if (
+      trips.length &&
+      user.locationSharing &&
+      age <= 120000 &&
+      at - since >= monitoring.idleMinutes * 60000
+    )
+      flags.push({
+        id: "idle-" + user.stationary.since,
+        kind: "Long stop",
+        at: user.stationary.since,
+        detail: `Within 150 m for ${Math.floor((at - since) / 60000)} minutes during an active trip, with continuous accurate GPS. Confirm waiting, traffic or an authorised break.`,
+      });
+    for (const o of orders)
+      for (const proof of o.proofs || []) {
+        if (
+          proof.driverId !== user.id ||
+          !Number.isFinite(proof.lat) ||
+          !Number.isFinite(proof.lng)
+        )
+          continue;
+        const nearby = [proof.gpsAtCapture, ...(user.locationHistory || [])]
+          .filter(Boolean)
+          .filter(
+            (p) =>
+              p.accuracy <= monitoring.maxAccuracy &&
+              Math.abs(Date.parse(p.at) - Date.parse(proof.at)) <= 120000,
+          )
+          .sort(
+            (a, b) =>
+              Math.abs(Date.parse(a.at) - Date.parse(proof.at)) -
+              Math.abs(Date.parse(b.at) - Date.parse(proof.at)),
+          )[0];
+        if (nearby && distance(nearby, proof) - nearby.accuracy > 500)
+          flags.push({
+            id: "proof-" + o.id + "-" + proof.at,
+            kind: "Proof / GPS discrepancy",
+            at: proof.at,
+            awb: o.awb,
+            detail: `${o.awb}: ${proof.stage} proof is ${Math.round(distance(nearby, proof))} m from GPS recorded within 2 minutes. Compare the proof and contact the driver; this does not check the destination address.`,
+          });
+      }
+    return flags.map((f) => ({
+      ...f,
+      review: (user.alertReviews || {})[f.id] || null,
+    }));
+  }
+  function fleet(users, orders, at = Date.now()) {
     return users
       .filter((u) => u.role === "driver")
       .map((user) => {
@@ -148,6 +277,42 @@
         return {
           id: user.id,
           name: user.name,
+          shipmentsHandled: orders.filter(
+            (o) =>
+              o.driver === user.id ||
+              o.pickups.some((p) => p.driver === user.id) ||
+              (o.trips || []).some((t) => t.driver === user.id) ||
+              o.history.some((h) => h.driverId === user.id),
+          ).length,
+          shipments: orders
+            .filter(
+              (o) =>
+                o.driver === user.id ||
+                o.pickups.some((p) => p.driver === user.id) ||
+                (o.trips || []).some((t) => t.driver === user.id) ||
+                o.history.some((h) => h.driverId === user.id),
+            )
+            .map((o) => ({
+              id: o.id,
+              awb: o.awb,
+              reference: o.reference,
+              recipient: o.recipient,
+              address: o.address,
+              status: o.status,
+              deliveryAssigned: o.driver === user.id,
+              pickups: o.pickups
+                .filter((p) => p.driver === user.id)
+                .map((p) => ({
+                  vendor: p.vendor.name,
+                  address: p.vendor.address,
+                  completed: p.completed,
+                })),
+              trips: (o.trips || []).filter((t) => t.driver === user.id),
+            })),
+          alerts: driverAlerts(user, orders, at),
+          reviews: Object.entries(user.alertReviews || {}).map(
+            ([id, review]) => ({ id, ...review }),
+          ),
           lastLocation: user.lastLocation || null,
           locationSharing: Boolean(user.locationSharing),
           assignedOrders: assignedOrders.length,
@@ -160,7 +325,13 @@
           failedDeliveries: deliveries.filter(
             (o) => o.status === "Delivery failed",
           ).length,
-          delivered: deliveries.filter((o) => o.status === "Delivered").length,
+          delivered: orders.filter(
+            (o) =>
+              (o.proofs || []).some(
+                (p) => p.stage === "Delivered" && p.driverId === user.id,
+              ) ||
+              (o.driver === user.id && o.status === "Delivered"),
+          ).length,
           pendingPickups: tasks.filter((p) => !p.completed).length,
           completedPickups: tasks.filter((p) => p.completed).length,
           activeTrips: trips,
@@ -264,6 +435,10 @@
       }));
   }
   return {
+    monitoring,
+    distance,
+    recordLocation,
+    driverAlerts,
     activeTrips,
     normaliseTrips,
     claimOrder,

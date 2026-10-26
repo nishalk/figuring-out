@@ -184,11 +184,37 @@ test(
         tracked.fleet.find((d) => d.id === loserId).lastLocation,
         null,
       );
+      await req(
+        admin,
+        "fleet/" + winnerId + "/review",
+        { alertId: "missing", note: "review" },
+        400,
+      );
+      await req(
+        winner,
+        "fleet/" + winnerId + "/review",
+        { alertId: "missing", note: "review" },
+        403,
+      );
       await req(winner, "driver/sharing", { enabled: false });
       assert.equal(
         (await req(admin, "state")).fleet.find((d) => d.id === winnerId)
           .locationSharing,
         false,
+      );
+      const gapFlag = (await req(admin, "state")).fleet
+        .find((d) => d.id === winnerId)
+        .alerts.find((a) => a.kind === "Tracking gap");
+      assert.ok(gapFlag);
+      await req(admin, "fleet/" + winnerId + "/review", {
+        alertId: gapFlag.id,
+        note: "Driver confirmed loading at vendor",
+      });
+      assert.equal(
+        (await req(admin, "state")).fleet
+          .find((d) => d.id === winnerId)
+          .alerts.find((a) => a.id === gapFlag.id).review.note,
+        "Driver confirmed loading at vendor",
       );
       await action(winner, {
         action: "pickup",
@@ -196,6 +222,19 @@ test(
         verifiedItems: [o.items[0].id],
         ...proof,
       });
+      const afterPickup = await req(admin, "state");
+      assert.equal(
+        afterPickup.orders[0].pickups[0].proof.gpsAtCapture.lat,
+        29.3759,
+      );
+      assert.ok(
+        !(
+          "locationHistory" in afterPickup.users.find((u) => u.id === winnerId)
+        ),
+      );
+      const reviewedDriver = afterPickup.fleet.find((d) => d.id === winnerId);
+      assert.equal(reviewedDriver.reviews.length, 1);
+      assert.equal(reviewedDriver.reviews[0].kind, "Tracking gap");
       await action(admin, { action: "receive", item: o.items[0].id });
       await req(loser, "driver/claim", { awb: o.awb, leg: "delivery" });
       await req(winner, "driver/claim", { awb: o.awb, leg: "delivery" }, 409);

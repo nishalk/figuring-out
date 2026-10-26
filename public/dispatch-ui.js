@@ -1,7 +1,9 @@
 /* Operational UI: fleet map, driver scanning/location tools and report views. */
+let selectedDriverId = null;
 let fleetMap,
   fleetMarkers = [],
   fleetRoot;
+let locationHeartbeat = null;
 let watchId = null,
   locationAutomatic = false,
   lastLocationSent = 0,
@@ -42,7 +44,7 @@ function renderFleet(root) {
     }
     fleetRoot = root;
     fleetMarkers = [];
-    root.innerHTML = `<section class="fleetSection"><div class="boardHeading"><div><h2>Fleet control</h2><p class="muted">Pickup and delivery legs · refreshes every 15 seconds</p></div><button class="ghost" id="refreshFleet">Refresh fleet</button></div><div class="fleetMapHeading"><span id="fleetRefreshTime"></span><button class="ghost" id="fitDrivers">Fit driver locations</button></div><div id="driverMap" role="region" aria-label="Driver location map"></div><p class="mapNotice" id="mapNotice">Markers show last reported GPS, not guaranteed current positions. Sharing requires the driver screen to remain open.</p><div id="fleetTable" class="tableScroll"></div><p class="muted fleetDefinitions">Assigned = open orders with a delivery or pending pickup for that driver. Pending delivery = not dispatched. Active trips = pickup or delivery legs currently in transit.</p></section>`;
+    root.innerHTML = `<section class="fleetSection"><div class="boardHeading"><div><h2>Fleet control</h2><p class="muted">Pickup and delivery legs · refreshes every 15 seconds</p></div><button class="ghost" id="refreshFleet">Refresh fleet</button></div><div class="fleetMapHeading"><span id="fleetRefreshTime"></span><button class="ghost" id="fitDrivers">Fit driver locations</button></div><div id="driverMap" role="region" aria-label="Driver location map"></div><p class="mapNotice" id="mapNotice">Markers show last reported GPS, not guaranteed current positions. Sharing requires the driver screen to remain open.</p><div id="fleetAlerts" aria-live="polite"></div><div id="fleetTable" class="tableScroll"></div><div id="driverProfile"></div><p class="muted fleetDefinitions">Assigned = open orders with a delivery or pending pickup for that driver. Pending delivery = not dispatched. Active trips = pickup or delivery legs currently in transit.</p></section>`;
     $("#refreshFleet").onclick = () =>
       run(async () => {
         state = await api("state");
@@ -82,6 +84,13 @@ function renderFleet(root) {
     "Updated " +
     displayTime(new Date().toISOString()) +
     (window.relayDemo ? " · Simulated sample locations" : "");
+  const openFlags = rows.flatMap((d) =>
+    (d.alerts || [])
+      .filter((a) => !a.review)
+      .map((a) => ({ ...a, driver: d.name, driverId: d.id })),
+  );
+  root.querySelector("#fleetAlerts").innerHTML =
+    `<section class="monitoringSummary"><h3>Operations review · ${openFlags.length} open flags</h3><p class="muted">Review signals, not findings of misconduct. Long stop: 20 min within 150 m on an active trip. GPS gap: 5 min. Jump: over 160 km/h after GPS accuracy allowance. Proof discrepancy: over 500 m from recent GPS.</p>${openFlags.map((a) => `<button class="ghost" data-driver-profile="${esc(a.driverId)}">${esc(a.driver)} · ${esc(a.kind)}</button>`).join("") || "<p>No current flags. Checks require location data; no flag does not verify activity.</p>"}</section>`;
   const oldCount = fleetMarkers.length;
   if (fleetMap) fleetMarkers.forEach((m) => m.remove());
   fleetMarkers = [];
@@ -109,7 +118,7 @@ function renderFleet(root) {
               );
             fleetMarkers.push(marker);
           }
-          return `<tr><td><strong>${esc(d.name)}</strong><small>${d.failedDeliveries} failed deliveries · ${d.completedPickups} pickups completed</small></td><td>${d.assignedOrders}</td><td>${d.pendingDeliveries}</td><td><details><summary>${d.activeTrips.length} in transit</summary>${d.activeTrips.map((t) => `<p>${esc(t.awb)} · ${esc(t.kind)}<small>${esc(t.milestone || "In transit")}</small></p>`).join("") || "<small>No active trips</small>"}</details></td><td><details><summary>${d.pendingPickups} pending</summary>${
+          return `<tr><td><button class="ghost driverProfileButton" data-driver-profile="${esc(d.id)}">${esc(d.name)} · View driver</button><small>${d.shipmentsHandled} shipments handled · ${(d.alerts || []).filter((a) => !a.review).length} open flags</small><small>${d.failedDeliveries} failed deliveries · ${d.completedPickups} pickups completed</small></td><td>${d.assignedOrders}</td><td>${d.pendingDeliveries}</td><td><details><summary>${d.activeTrips.length} in transit</summary>${d.activeTrips.map((t) => `<p>${esc(t.awb)} · ${esc(t.kind)}<small>${esc(t.milestone || "In transit")}</small></p>`).join("") || "<small>No active trips</small>"}</details></td><td><details><summary>${d.pendingPickups} pending</summary>${
             d.pickups
               .filter((p) => !p.completed)
               .map(
@@ -121,6 +130,17 @@ function renderFleet(root) {
         })
         .join("")}</tbody></table>`
     : '<p class="muted">Create driver accounts in Team access. Their workloads and shared locations will appear here.</p>';
+  root.querySelectorAll("[data-driver-profile]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        selectedDriverId = b.dataset.driverProfile;
+        renderDriverProfile(root, rows);
+        root
+          .querySelector("#driverProfile")
+          .scrollIntoView({ behavior: "smooth", block: "start" });
+      }),
+  );
+  renderDriverProfile(root, rows);
   root.querySelectorAll("[data-locate]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -141,6 +161,52 @@ function renderFleet(root) {
     if (!oldCount && fleetMarkers.length)
       root.querySelector("#fitDrivers").click();
   }
+}
+function renderDriverProfile(root, rows) {
+  const target = root.querySelector("#driverProfile");
+  const d = rows.find((d) => d.id === selectedDriverId);
+  if (!d) {
+    target.innerHTML = "";
+    return;
+  }
+  // Preserve an unfinished review during fleet polling.
+  if (
+    target.dataset.driver === d.id &&
+    target.contains(document.activeElement) &&
+    document.activeElement.closest("form")
+  )
+    return;
+  target.dataset.driver = d.id;
+  target.innerHTML = `<section class="driverProfile"><div class="boardHeading"><div><div class="eyebrow">DRIVER DETAILS</div><h2>${esc(d.name)}</h2><p class="muted">All recorded history · unique shipments handled includes pickup, delivery and previous trip assignments. Current workload and completed legs are separate counts.</p></div><button class="ghost" id="closeDriverProfile">Close</button></div><div class="driverCounters"><span><strong>${d.shipmentsHandled}</strong> Shipments handled</span><span><strong>${d.assignedOrders}</strong> Open assigned shipments</span><span><strong>${d.delivered}</strong> Delivered</span><span><strong>${d.pendingDeliveries}</strong> Awaiting dispatch</span><span><strong>${d.inTransitDeliveries}</strong> Out for delivery</span><span><strong>${d.failedDeliveries}</strong> Failed delivery</span><span><strong>${d.completedPickups}</strong> Pickups completed</span><span><strong>${d.pendingPickups}</strong> Pickups pending</span><span><strong>${d.activeTrips.length}</strong> Active trip legs</span></div><h3>Location & activity review</h3><p>${d.lastLocation ? `Last GPS ${displayTime(d.lastLocation.at)} · ±${Math.round(d.lastLocation.accuracy)} m` : "No GPS reported"} · ${d.locationSharing ? "Sharing enabled" : "Sharing paused"}</p><p class="muted">Proof checks compare GPS sources, not the destination address. Destination geofencing needs verified map pins. GPS can be inaccurate; confirm with the driver before acting.</p>${(d.alerts || []).map((a) => `<article class="driverFlag ${a.review ? "reviewed" : ""}"><h4>${esc(a.kind)} ${a.review ? "· Reviewed" : "· Needs review"}</h4><p>${esc(a.detail)}</p><small>${displayTime(a.at)}</small>${a.review ? `<p>Reviewed by ${esc(a.review.by)} · ${displayTime(a.review.at)}<br>${esc(a.review.note)}</p>` : `<form data-review-alert="${esc(a.id)}"><label>Review note<input name="note" required maxlength="500" placeholder="For example: confirmed waiting at vendor"></label><button>Record review</button></form>`}</article>`).join("") || "<p>No review flags recorded.</p>"}${d.reviews?.length ? `<details><summary>Review log · ${d.reviews.length} recorded</summary>${d.reviews.map((r) => `<p><strong>${esc(r.kind || "Location review")}</strong> · ${esc(r.by)} · ${displayTime(r.at)}<br>${esc(r.note)}</p>`).join("")}</details>` : ""}<h3>Shipments, pickups & trip history</h3><div class="tableScroll"><table><thead><tr><th>Shipment</th><th>Current order status</th><th>Driver’s work</th><th>Trips</th></tr></thead><tbody>${(d.shipments || []).map((o) => `<tr><td><button class="ghost" data-driver-order="${esc(o.id)}">${esc(o.awb)}</button><small>${esc(o.reference)} · ${esc(o.recipient)}</small><small>${esc(o.address)}</small></td><td>${esc(o.status)}</td><td>${o.deliveryAssigned ? "Current delivery driver" : ""}${o.pickups.map((p) => `<p>${esc(p.vendor)} · ${p.completed ? "Pickup completed" : "Pickup pending"}<small>${esc(p.address)}</small></p>`).join("") || (o.deliveryAssigned ? "" : "Previous assignment")}</td><td>${o.trips.map((t) => `<p>${esc(t.kind)} · ${esc(t.status)}<small>${displayTime(t.startedAt)} → ${displayTime(t.endedAt)} · ${esc(t.milestone || "")}</small></p>`).join("") || "Not started"}</td></tr>`).join("") || '<tr><td colspan="4">No shipments recorded.</td></tr>'}</tbody></table></div></section>`;
+  target.querySelector("#closeDriverProfile").onclick = () => {
+    selectedDriverId = null;
+    target.innerHTML = "";
+  };
+  target.querySelectorAll("[data-driver-order]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        selectedOrder = b.dataset.driverOrder;
+        searchQuery = "";
+        statusFilter = "";
+        render();
+        document
+          .querySelector(".orderCard.selected")
+          ?.scrollIntoView({ block: "center" });
+      }),
+  );
+  target.querySelectorAll("[data-review-alert]").forEach(
+    (form) =>
+      (form.onsubmit = (e) => {
+        e.preventDefault();
+        run(async () => {
+          await api("fleet/" + encodeURIComponent(d.id) + "/review", {
+            alertId: form.dataset.reviewAlert,
+            note: new FormData(form).get("note"),
+          });
+          await refresh("Review recorded");
+        });
+      }),
+  );
 }
 function pickupTripControls(o, p, manager, button) {
   if (
@@ -212,38 +278,40 @@ async function startLocationSharing(automatic = false) {
     if ($("#driverTools")) renderDriverPanel($("#driverTools"));
     return;
   }
+  const onPosition = async (position) => {
+    if (
+      watchId === null ||
+      document.hidden ||
+      sendingLocation ||
+      Date.now() - lastLocationSent < 15000
+    )
+      return;
+    sendingLocation = true;
+    try {
+      locationRequest = api("driver/location", {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      });
+      await locationRequest;
+      lastLocationSent = Date.now();
+      if ($("#gpsState"))
+        $("#gpsState").textContent =
+          "GPS updated " +
+          new Date().toLocaleTimeString("en-GB", {
+            timeZone: "Asia/Kuwait",
+          }) +
+          " · ±" +
+          Math.round(position.coords.accuracy) +
+          " m";
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      sendingLocation = false;
+    }
+  };
   watchId = navigator.geolocation.watchPosition(
-    async (position) => {
-      if (
-        document.hidden ||
-        sendingLocation ||
-        Date.now() - lastLocationSent < 15000
-      )
-        return;
-      sendingLocation = true;
-      try {
-        locationRequest = api("driver/location", {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        });
-        await locationRequest;
-        lastLocationSent = Date.now();
-        if ($("#gpsState"))
-          $("#gpsState").textContent =
-            "GPS updated " +
-            new Date().toLocaleTimeString("en-GB", {
-              timeZone: "Asia/Kuwait",
-            }) +
-            " · ±" +
-            Math.round(position.coords.accuracy) +
-            " m";
-      } catch (error) {
-        toast(error.message, "error");
-      } finally {
-        sendingLocation = false;
-      }
-    },
+    onPosition,
     (error) => {
       toast(
         error.code === 1
@@ -259,12 +327,22 @@ async function startLocationSharing(automatic = false) {
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
   );
+  locationHeartbeat = setInterval(() => {
+    if (watchId === null || document.hidden) return;
+    navigator.geolocation.getCurrentPosition(onPosition, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 20000,
+    });
+  }, 30000);
   if ($("#driverTools")) renderDriverPanel($("#driverTools"));
 }
 async function stopLocationSharing() {
   const wasActive = watchId !== null;
   if (watchId !== null && watchId !== "sample")
     navigator.geolocation.clearWatch(watchId);
+  clearInterval(locationHeartbeat);
+  locationHeartbeat = null;
   watchId = null;
   locationAutomatic = false;
   lastLocationSent = 0;
@@ -291,6 +369,8 @@ function pauseForBackground() {
   stopScanner();
   if (watchId === null) return;
   if (watchId !== "sample") navigator.geolocation.clearWatch(watchId);
+  clearInterval(locationHeartbeat);
+  locationHeartbeat = null;
   watchId = null;
   locationAutomatic = false;
   lastLocationSent = 0;

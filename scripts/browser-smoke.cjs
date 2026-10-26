@@ -276,6 +276,49 @@ const fs = require("node:fs"),
       ),
     );
     assert.equal(await page.locator(".driverMarker").count(), 2);
+    await fleetRow()
+      .getByRole("button", {
+        name: "Sample Driver Two · View driver",
+        exact: true,
+      })
+      .click();
+    await page
+      .locator("#driverProfile")
+      .getByRole("heading", { name: "Sample Driver Two", exact: true })
+      .waitFor();
+    assert.ok(
+      (await page.locator("#driverProfile").textContent()).includes(
+        "SAMPLE-1004",
+      ),
+    );
+    assert.ok(
+      (await page.locator("#driverProfile").textContent()).includes(
+        "Shipments handled",
+      ),
+    );
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page
+      .locator("#fleetTable")
+      .getByRole("button", { name: "Demo Driver · View driver", exact: true })
+      .click();
+    await page
+      .locator(
+        '#driverProfile form[data-review-alert="sample-location-jump"] input',
+      )
+      .fill("Confirmed this is the simulated GPS example");
+    await page
+      .locator(
+        '#driverProfile form[data-review-alert="sample-location-jump"] button',
+      )
+      .click();
+    await page.locator("#driverProfile .driverFlag.reviewed").waitFor();
+    assert.ok(
+      (
+        await page.locator("#driverProfile .driverFlag.reviewed").textContent()
+      ).includes("Confirmed this is the simulated GPS example"),
+    );
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+
     await page.getByRole("button", { name: "Reports", exact: true }).click();
     await page
       .getByRole("heading", {

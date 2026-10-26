@@ -12,7 +12,7 @@ The supplied XLSX is a FarEye report with 22 columns and 777 data rows. Its fiel
 4. Explicit multi-order route manifests and driver handover reconciliation, distinct from today's per-order/per-pickup legs.
 5. Historical route playback only after consent, retention settings and a suitable Android background-tracking implementation; current foreground web GPS is not a historic continuous trail.
 
-These are recommendations, not claims of completed features. Existing fleet maps, trips and reports remain available.
+These are recommendations, not claims of completed features. Individual driver workload profiles and a location-review queue are now implemented; see [driver monitoring](driver-monitoring.md) for thresholds and limitations. The broader delivery-slot exception queue and route playback remain future work. Existing fleet maps, trips and reports remain available.
 
 ## Import foundation implemented
 
