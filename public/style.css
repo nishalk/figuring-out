@@ -2505,3 +2505,70 @@ canvas {
     width: 85px;
   }
 }
+/* Original bow and flowing ribbon paths from the Mawada brand guide. */
+.mawadaRibbon.brandBow {
+  aspect-ratio: 300 / 195;
+  background: currentColor;
+  mask: url("/brand/mawada-bow.svg") center / contain no-repeat;
+  -webkit-mask: url("/brand/mawada-bow.svg") center / contain no-repeat;
+  transform: none;
+  opacity: 0.9;
+}
+.executiveDashboard .chartCard:after {
+  content: none;
+}
+.ribbonArt {
+  border: 0;
+  border-radius: 0;
+  width: 70%;
+  height: 100%;
+  right: -4%;
+  top: 0;
+  transform: none;
+  background: currentColor;
+  color: var(--accent);
+  mask: url("/brand/mawada-ribbons.svg") center / cover no-repeat;
+  -webkit-mask: url("/brand/mawada-ribbons.svg") center / cover no-repeat;
+  opacity: 0.09;
+}
+.ribbonArt:after {
+  content: none;
+}
+:root[data-theme="dark"] .ribbonArt {
+  border: 0;
+  background: #fcf6f2;
+  opacity: 0.09;
+}
+.executiveHero {
+  position: relative;
+  isolation: isolate;
+}
+.executiveHero:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--accent);
+  mask: url("/brand/mawada-ribbons.svg") center / cover no-repeat;
+  -webkit-mask: url("/brand/mawada-ribbons.svg") center / cover no-repeat;
+  opacity: 0.055;
+}
+.appearanceSettings {
+  position: relative;
+  isolation: isolate;
+}
+.appearanceSettings:before {
+  content: "";
+  position: absolute;
+  top: -20px;
+  right: 0;
+  width: 200px;
+  height: 160px;
+  z-index: -1;
+  background: var(--accent);
+  mask: url("/brand/mawada-ribbons.svg") right / cover no-repeat;
+  -webkit-mask: url("/brand/mawada-ribbons.svg") right / cover no-repeat;
+  opacity: 0.1;
+  pointer-events: none;
+}
