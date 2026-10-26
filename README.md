@@ -40,3 +40,7 @@ This is a prototype, not production-ready dispatch software. Customer messaging/
 ## Cloud hosting
 
 See [the private trial deployment guide](docs/deployment.md) for `areyoutrip.in`, Docker hosting, persistent storage, protected first-account setup, HTTPS, and DNS connection requirements. Domain ownership alone does not supply application hosting. Deployment remains pending hosting-account access.
+
+## Supabase
+
+Optional remote storage is available using `DATABASE_BACKEND=supabase`. Follow [the Supabase setup guide](docs/supabase.md) before enabling it. Hostinger-injected Supabase variables alone leave the SQLite backend unchanged. Existing SQLite data is not automatically copied. The SQL schema and server-only key must be configured in the connected project before switching; local tests do not verify the live project.

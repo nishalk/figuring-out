@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node --test",
     "start": "node server.js",
-    "format:check": "prettier --check server.js domain.js public test package.json"
+    "format:check": "prettier --check server.js domain.js storage.js public test package.json"
   },
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/nishalk/figuring-out#readme",
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "bcryptjs": "^3.0.3",
     "bwip-js": "^4.11.4",
     "exceljs": "^4.4.0",
