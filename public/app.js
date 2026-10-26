@@ -15,6 +15,7 @@ const esc = (s) =>
       ],
   );
 async function api(url, body) {
+  if (window.relayDemo) return window.relayDemo.request(url, body);
   const r = await fetch("/api/" + url, {
     method: body ? "POST" : "GET",
     headers:
@@ -25,7 +26,11 @@ async function api(url, body) {
       body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
   });
   const j = await r.json();
-  if (!r.ok) throw Error(j.error || "Request failed");
+  if (!r.ok)
+    throw Object.assign(Error(j.error || "Request failed"), {
+      status: r.status,
+      code: j.code,
+    });
   return j;
 }
 async function run(fn) {
@@ -38,15 +43,22 @@ async function run(fn) {
 const field = (name, label, type = "text") =>
   `<label>${label}<input name="${name}" type="${type}" required></label>`;
 async function boot() {
-  const s = await api("setup");
-  if (s.required) return auth(true, s.keyRequired);
   try {
-    state = await api("state");
-    render();
-  } catch {
-    auth(false);
+    const s = await api("setup");
+    if (s.required) return auth(true, s.keyRequired);
+    try {
+      state = await api("state");
+      render();
+    } catch (error) {
+      if (error.status === 401) auth(false);
+      else throw error;
+    }
+  } catch (error) {
+    app.innerHTML = `<section class="auth"><h1>App setup needs attention</h1><p>${esc(error.message)}</p><p>Your data has not been moved or replaced.</p><button id="retryStartup">Try again</button><a class="primaryLink" href="/demo">Try the sample-data demo</a><p class="muted">The demo is separate from your operational data. Share the error code with your administrator: ${esc(error.code || "CONNECTION_ERROR")}</p></section>`;
+    $("#retryStartup").onclick = boot;
   }
 }
+
 function auth(setup, keyRequired = false) {
   app.innerHTML = `<section class="auth"><h1>${setup ? "Set up Relay" : "Welcome back"}</h1><p>${setup ? "Create your administrator account. Use a password of at least 12 characters." : "Sign in to your delivery workspace."}</p><form id="auth">${setup ? field("name", "Your name") : ""}${setup && keyRequired ? field("setupKey", "Setup key (from Hostinger settings)", "password") : ""}${field("email", "Email", "email")}${field("password", "Password", "password")}<button>${setup ? "Create administrator" : "Sign in"}</button></form></section>`;
   $("#auth").onsubmit = (e) => {
@@ -65,7 +77,7 @@ function render() {
   const admin = state.user.role === "admin",
     ops = admin || state.user.role === "operations";
   $("#logout").hidden = false;
-  app.innerHTML = `<div class="row"><div><p class="muted">OPERATIONS WORKSPACE · KUWAIT</p>${admin ? `<p class="muted">${state.storageBackend === "supabase" ? "Cloud database: Supabase" : "Local trial database"}</p>` : ""}<h1>Your deliveries, connected.</h1></div><span>${esc(state.user.name)} · ${esc(state.user.role)}</span></div><div class="grid stats">${["Created", "Picked up", "At warehouse", "Out for delivery", "Delivery failed", "Delivered"].map((s) => `<section><span class="muted">${s}</span><strong>${state.orders.filter((o) => o.status === s).length}</strong></section>`).join("")}</div><nav><button data-view="orders">Orders</button>${ops ? '<button data-view="create">New order / Excel</button><button data-view="vendors">Vendors</button>' : ""}${admin ? '<button data-view="users">Team access</button>' : ""}</nav><div id="content"></div>`;
+  app.innerHTML = `<div class="row"><div><p class="muted">OPERATIONS WORKSPACE · KUWAIT</p>${admin ? `<p class="muted">${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</p>` : ""}<h1>Your deliveries, connected.</h1></div><span>${esc(state.user.name)} · ${esc(state.user.role)}</span></div><div class="grid stats">${["Created", "Picked up", "At warehouse", "Out for delivery", "Delivery failed", "Delivered"].map((s) => `<section><span class="muted">${s}</span><strong>${state.orders.filter((o) => o.status === s).length}</strong></section>`).join("")}</div><nav><button data-view="orders">Orders</button>${ops ? '<button data-view="create">New order / Excel</button><button data-view="vendors">Vendors</button>' : ""}${admin ? '<button data-view="users">Team access</button>' : ""}</nav><div id="content"></div>`;
   document.querySelectorAll("[data-view]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -210,6 +222,7 @@ function orders(c) {
             proofStage = action;
             proofPickup = b.dataset.pickup;
             $("#proofForm").reset();
+            $('#proofForm input[name="photo"]').required = !window.relayDemo;
             clear();
             const items =
               action === "pickup"
@@ -261,7 +274,7 @@ function orders(c) {
 }
 function printLabel(o) {
   $("#labelContent").innerHTML =
-    `<h2>RELAY · KUWAIT</h2><img class="barcode" src="/api/orders/${o.id}/awb" alt="AWB barcode"><h3>${esc(o.awb)}</h3><p>Reference: ${esc(o.reference)}</p><h3>${esc(o.recipient)}</h3><p>${esc(o.phone)}</p><p>${esc(o.address)}</p><hr><p>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</p>${o.items.map((i) => `<p>${esc(i.name)} × ${i.quantity} · ${esc(i.vendor.name)}</p>`).join("")}`;
+    `<h2>RELAY · KUWAIT</h2><img class="barcode" src="${window.relayDemo ? "/demo/barcode/" + o.awb : "/api/orders/" + o.id + "/awb"}" alt="AWB barcode"><h3>${esc(o.awb)}</h3><p>Reference: ${esc(o.reference)}</p><h3>${esc(o.recipient)}</h3><p>${esc(o.phone)}</p><p>${esc(o.address)}</p><hr><p>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</p>${o.items.map((i) => `<p>${esc(i.name)} × ${i.quantity} · ${esc(i.vendor.name)}</p>`).join("")}`;
   $("#label").showModal();
   const img = $("#labelContent img");
   $("#printLabel").disabled = true;
@@ -335,19 +348,24 @@ $("#proofForm").onsubmit = (e) => {
       file = f.get("photo");
     if (file.size > 4 * 1024 * 1024)
       throw Error("Photo must be smaller than 4 MB");
-    const photo = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.onerror = rej;
-      r.readAsDataURL(file);
-    });
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(
-        res,
-        () => rej(Error("Allow GPS access to record proof")),
-        { enableHighAccuracy: true, timeout: 20000 },
-      ),
-    );
+    const photo =
+      window.relayDemo && !file.size
+        ? window.relayDemo.samplePhoto
+        : await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(r.result);
+            r.onerror = rej;
+            r.readAsDataURL(file);
+          });
+    const pos = window.relayDemo
+      ? { coords: { latitude: 29.3759, longitude: 47.9774 } }
+      : await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(
+            res,
+            () => rej(Error("Allow GPS access to record proof")),
+            { enableHighAccuracy: true, timeout: 20000 },
+          ),
+        );
     await api("orders/" + proofOrder + "/action", {
       action: proofStage,
       pickup: proofPickup,

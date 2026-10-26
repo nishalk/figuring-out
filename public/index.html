@@ -8,7 +8,15 @@
   <body>
     <header>
       <div><b>◈ RELAY</b><small>Kuwait delivery operations</small></div>
-      <button id="logout" hidden>Sign out</button>
+      <div>
+        <a
+          class="feedbackLink"
+          href="https://github.com/nishalk/figuring-out/issues/new?title=Prototype%20feedback&body=Screen%20or%20step%3A%0A%0AWhat%20happened%3A%0A%0AWhat%20I%20expected%3A%0A%0ASuggested%20improvement%3A%0A%0APlease%20omit%20customer%20data%2C%20passwords%20and%20API%20keys."
+          target="_blank"
+          rel="noopener noreferrer"
+          >Suggest an improvement ↗</a
+        ><button id="logout" hidden>Sign out</button>
+      </div>
     </header>
     <main id="app"></main>
     <dialog id="proof">
@@ -61,6 +69,7 @@
       <button id="printLabel">Print</button
       ><button data-close="label">Close</button>
     </dialog>
+    <script src="/demo.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 # Private trial deployment for areyoutrip.in
 
-Deployment is pending selection of and access to a hosting provider. No DNS records have been changed and no website has been deployed.
+Hostinger managed Node deployment has been configured at delivery.areyoutrip.in. The user reports a 503 runtime failure despite a completed build. Runtime logs are not accessible from this coding workspace; the live failure is not yet diagnosed. The isolated sample demo and startup-status page are designed to remain available when application configuration is incomplete. This does not establish that the hosting process itself can start.
 
 ## Required hosting
 

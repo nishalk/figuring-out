@@ -183,3 +183,78 @@ dialog {
     margin: 12mm;
   }
 }
+
+.feedbackLink {
+  color: #c4f4e7;
+  margin-right: 12px;
+  font-size: 14px;
+}
+.primaryLink {
+  display: inline-block;
+  padding: 12px;
+  color: #126c5f;
+}
+.demoBanner {
+  background: #fff4d2;
+  color: #563d08;
+  padding: 18px 5%;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.demoBanner span {
+  flex: 1;
+  min-width: 200px;
+}
+.demoBanner select {
+  width: auto;
+  margin: 0;
+}
+.demoBanner label {
+  font-size: 13px;
+}
+.demoBanner a {
+  color: #563d08;
+}
+@media (max-width: 600px) {
+  header {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  header > div:last-child {
+    display: flex;
+    flex-direction: column;
+  }
+  .feedbackLink {
+    font-size: 12px;
+  }
+  .demoBanner {
+    gap: 10px;
+  }
+}
+.stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+.stats section {
+  margin-bottom: 0;
+}
+@media (max-width: 600px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .stats section {
+    padding: 12px;
+  }
+  .stats strong {
+    font-size: 24px;
+  }
+  .demoBanner select {
+    max-width: 100%;
+  }
+  .demoBanner label {
+    max-width: 100%;
+  }
+}

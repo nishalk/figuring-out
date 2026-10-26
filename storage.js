@@ -111,6 +111,10 @@ function createStorage(env = process.env, clientOverride) {
     clientOverride ||
     createClient(env.SUPABASE_URL, key, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        fetch: (url, options) =>
+          fetch(url, { ...options, signal: AbortSignal.timeout(15000) }),
+      },
     });
   function checked(result) {
     if (result.error) {
