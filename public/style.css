@@ -2483,3 +2483,25 @@ canvas {
   border-radius: 12px;
   background: var(--accent-soft);
 }
+
+/* Decorative gift ribbon: vector curves, independent of installed fonts. */
+.mawadaRibbon {
+  width: clamp(110px, 18vw, 220px);
+  flex-shrink: 0;
+  color: var(--accent);
+  transform: rotate(-10deg);
+  opacity: 0.75;
+}
+.mawadaRibbon svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+:root[data-theme="dark"] .mawadaRibbon {
+  color: #fcf6f2;
+}
+@media (max-width: 600px) {
+  .mawadaRibbon {
+    width: 85px;
+  }
+}
