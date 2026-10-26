@@ -36,3 +36,7 @@ This is a prototype, not production-ready dispatch software. Customer messaging/
 ## Tests
 
 `npm test` verifies complete-order dispatch rules and runs an isolated API workflow covering separate vendor pickups, role restrictions, warehouse consolidation, dispatch verification, delivery failure/return/rescheduling, delivery proof, barcode generation, and real Excel preview/import/duplicate rejection. `npm run format:check` checks formatting.
+
+## Cloud hosting
+
+See [the private trial deployment guide](docs/deployment.md) for `areyoutrip.in`, Docker hosting, persistent storage, protected first-account setup, HTTPS, and DNS connection requirements. Domain ownership alone does not supply application hosting. Deployment remains pending hosting-account access.
