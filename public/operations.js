@@ -434,7 +434,95 @@
         })),
       }));
   }
+  function dailyOverview(orders, at = Date.now()) {
+    const day = (value) =>
+      Number.isFinite(Date.parse(value))
+        ? new Date(Date.parse(value) + 10800000).toISOString().slice(0, 10)
+        : null;
+    const today = day(new Date(at).toISOString()),
+      yesterday = day(new Date(at - 86400000).toISOString());
+    const deadline = (o) => {
+      if (
+        o.deliveryDueAt &&
+        /(?:Z|[+-]\d\d:\d\d)$/.test(o.deliveryDueAt) &&
+        Number.isFinite(Date.parse(o.deliveryDueAt))
+      )
+        return Date.parse(o.deliveryDueAt);
+      const slot = String(o.timeSlot || "").match(
+        /^\s*(?:[01]?\d|2[0-3]):[0-5]\d\s*[-–]\s*((?:[01]?\d|2[0-3]):[0-5]\d)\s*$/,
+      );
+      if (!slot || !/^\d{4}-\d{2}-\d{2}$/.test(o.deliveryDate || ""))
+        return null;
+      return Date.parse(
+        o.deliveryDate + "T" + slot[1].padStart(5, "0") + ":00+03:00",
+      );
+    };
+    const deliveryProof = (o) =>
+      (o.proofs || []).filter((p) => p.stage === "Delivered").at(-1);
+    const result = (date) => {
+      const due = orders.filter((o) => o.deliveryDate === date);
+      const completed = orders.filter(
+        (o) => day(deliveryProof(o)?.at) === date,
+      );
+      const pickups = orders.flatMap((o) =>
+        o.pickups.map((p) => ({ ...p, awb: o.awb })),
+      );
+      const duePickups = pickups.filter((p) => day(p.dueAt) === date);
+      const delayRows = due
+        .filter((o) => {
+          const end = deadline(o);
+          return (
+            end !== null &&
+            (deliveryProof(o)
+              ? Date.parse(deliveryProof(o).at) > end
+              : at > end)
+          );
+        })
+        .map((o) => ({
+          awb: o.awb,
+          status: o.status,
+          minutes: Math.floor(
+            ((deliveryProof(o) ? Date.parse(deliveryProof(o).at) : at) -
+              deadline(o)) /
+              60000,
+          ),
+          pending: !deliveryProof(o),
+        }));
+      const pickupDelays = duePickups.filter((p) =>
+        p.completed
+          ? Date.parse(p.proof?.at) > Date.parse(p.dueAt)
+          : at > Date.parse(p.dueAt),
+      );
+      return {
+        date,
+        due: due.length,
+        delivered: completed.length,
+        pickupsCompleted: pickups.filter(
+          (p) => p.completed && day(p.proof?.at) === date,
+        ).length,
+        failed: orders.reduce(
+          (n, o) =>
+            n + (o.attempts || []).filter((a) => day(a.at) === date).length,
+          0,
+        ),
+        lateDeliveries: delayRows.length,
+        deliveryUnknown: due.filter((o) => deadline(o) === null).length,
+        pickupsDue: duePickups.length,
+        latePickups: pickupDelays.length,
+        pickupUnknown: pickups.filter((p) => !p.dueAt).length,
+        delayRows,
+        pickupDelayRows: pickupDelays.map((p) => ({
+          awb: p.awb,
+          vendor: p.vendor.name,
+          completed: p.completed,
+        })),
+        remaining: due.filter((o) => !deliveryProof(o)).length,
+      };
+    };
+    return { today: result(today), yesterday: result(yesterday) };
+  }
   return {
+    dailyOverview,
     monitoring,
     distance,
     recordLocation,

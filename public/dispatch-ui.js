@@ -706,7 +706,7 @@ function startOperationalPolling() {
     if (
       typeof state === "undefined" ||
       !state?.user ||
-      view !== "orders" ||
+      !["orders", "dashboard"].includes(view) ||
       document.hidden ||
       busy ||
       polling
@@ -724,6 +724,10 @@ function startOperationalPolling() {
       );
       const next = await api("state");
       state = next;
+      if (view === "dashboard") {
+        renderExecutiveDashboard(document.querySelector("#content"));
+        return;
+      }
       if ($("#fleetPanel")) renderFleet($("#fleetPanel"));
       if (
         before !==
@@ -796,4 +800,49 @@ function renderDashboardCharts(root, drivers) {
           .scrollIntoView({ behavior: "smooth" });
       }),
   );
+}
+
+function renderExecutiveDashboard(root) {
+  const daily = RelayOperations.dailyOverview(state.orders),
+    now = daily.today,
+    prev = daily.yesterday;
+  const fleet = state.fleet || [],
+    flags = fleet
+      .flatMap((d) => d.alerts || [])
+      .filter((a) => !a.review).length;
+  const metrics = [
+    ["Deliveries due", "due"],
+    ["Delivered", "delivered"],
+    ["Remaining due", "remaining"],
+    ["Pickups completed", "pickupsCompleted"],
+    ["Late deliveries", "lateDeliveries"],
+    ["Late pickups", "latePickups"],
+  ];
+  root.innerHTML = `<section class="executiveDashboard"><div class="executiveHero"><div><span class="eyebrow">MAWADA · THE DAILY PICTURE</span><h2>Every gift has a journey.<br>See how today is unfolding.</h2><p>${esc(now.date)} · Asia/Kuwait · refreshes every 15 seconds</p></div><div class="whiteBow" aria-hidden="true">୨୧</div></div><div class="dailyMetrics">${metrics.map(([label, key]) => `<article class="chartCard"><span>${label}</span><strong>${now[key]}</strong><small>Yesterday: ${prev[key]} · ${now[key] - prev[key] > 0 ? "+" : ""}${now[key] - prev[key]} count change</small></article>`).join("")}</div><p class="muted">Today is a partial day; yesterday is a full calendar day. Due/remaining use scheduled delivery dates. Completed counts use proof timestamps. Delays include late completions and overdue unfinished work.</p><div class="mawadaWorkload"><span>${fleet.length} drivers</span><span>${fleet.reduce((n, d) => n + d.activeTrips.length, 0)} active trip legs</span><span>${flags} open location review flags</span></div><div id="overviewCharts"></div><section class="chartCard previousDay"><div class="eyebrow">YESTERDAY · ${esc(prev.date)}</div><h3>What needs a follow-up?</h3><p>${prev.delivered} delivered · ${prev.pickupsCompleted} pickups completed · ${prev.remaining} scheduled deliveries still without delivery proof</p><h4>Delivery delays · ${prev.lateDeliveries}</h4>${prev.delayRows.map((o) => `<p><strong>${esc(o.awb)}</strong> · ${o.pending ? "Overdue, not delivered" : "Delivered late"} · ${o.minutes} minutes past deadline</p>`).join("") || "<p>No confirmed delivery delays in records with a usable deadline.</p>"}<p class="muted">${prev.deliveryUnknown} of yesterday’s scheduled deliveries have no usable deadline. A delivery date alone does not establish lateness. Supported slots: 24-hour HH:mm–HH:mm.</p><h4>Pickup delays · ${prev.latePickups}</h4>${prev.pickupDelayRows.map((p) => `<p>${esc(p.awb)} · ${esc(p.vendor)} · ${p.completed ? "Collected late" : "Overdue pickup"}</p>`).join("") || "<p>No confirmed pickup delays in records with a scheduled pickup deadline.</p>"}<p class="muted">${prev.pickupUnknown} pickup tasks across all records have no scheduled deadline, so pickup punctuality cannot be assessed for them. Pickup deadline entry is not yet available in the UI.</p></section><button class="ghost" id="openDashboardOrders">Open order workspace</button></section>`;
+  renderDashboardCharts(root.querySelector("#overviewCharts"), fleet);
+  // Dashboard remains a summary; chart drilldowns move to the operational workspace.
+  root.querySelectorAll("[data-chart-status]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        view = "orders";
+        statusFilter = b.dataset.chartStatus;
+        searchQuery = "";
+        render();
+      }),
+  );
+  root.querySelectorAll("[data-chart-driver]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        selectedDriverId = b.dataset.chartDriver;
+        view = "orders";
+        render();
+        document
+          .querySelector("#driverProfile")
+          ?.scrollIntoView({ behavior: "smooth" });
+      }),
+  );
+  root.querySelector("#openDashboardOrders").onclick = () => {
+    view = "orders";
+    render();
+  };
 }

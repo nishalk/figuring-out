@@ -86,6 +86,20 @@ const fs = require("node:fs"),
     await page.getByRole("button", { name: /Midnight Burgundy/ }).click();
     await page.locator("[data-view=orders]").click();
     assert.equal(await page.locator("#dashboardCharts .chartCard").count(), 2);
+    assert.equal(
+      await page
+        .locator(".mawadaLogo")
+        .evaluate((img) => img.complete && img.naturalWidth > 0),
+      true,
+    );
+    await page.locator("[data-view=dashboard]").click();
+    assert.equal(await page.locator(".dailyMetrics article").count(), 6);
+    assert.equal(await page.locator("#orderList").count(), 0);
+    await page.locator("#overviewCharts [data-chart-status]").first().click();
+    await page
+      .getByRole("heading", { name: "Order board", exact: true })
+      .waitFor();
+    await page.locator("#statusFilter").selectOption("");
     // Appearance preference survives reloads, and System tracks the device.
     await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
     assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");

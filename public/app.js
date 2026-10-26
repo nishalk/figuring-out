@@ -152,6 +152,9 @@ function render() {
   const admin = state.user.role === "admin",
     ops = admin || state.user.role === "operations";
   const pages = [
+    ...(ops
+      ? [{ id: "dashboard", label: "Dashboard", symbol: "warehouse" }]
+      : []),
     { id: "orders", label: "Orders", symbol: "orders" },
     ...(ops
       ? [
@@ -166,6 +169,7 @@ function render() {
   if (!pages.some((p) => p.id === view)) view = "orders";
   $("#logout").hidden = false;
   const titles = {
+    dashboard: "A beautiful overview of your day.",
     orders: "Every delivery. One clear view.",
     create: "A new journey starts here.",
     vendors: "Your pickup network.",
@@ -202,6 +206,7 @@ function render() {
   if (view === "users") users(c);
   if (view === "reports") renderReports(c);
   if (view === "settings") renderAppearance(c);
+  if (view === "dashboard") renderExecutiveDashboard(c);
   if (ops && view === "orders") renderFleet($("#fleetPanel"));
 }
 async function refresh(message = "Workspace updated") {

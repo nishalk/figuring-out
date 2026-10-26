@@ -2359,3 +2359,105 @@ canvas {
     grid-row: 5 / 7;
   }
 }
+.mawadaLogo {
+  width: 136px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+.fleetSection > #mawadaOverview,
+.fleetSection > #dashboardCharts {
+  display: none;
+}
+@media (min-width: 1100px) {
+  #fleetAlerts {
+    grid-row: 3 / 5;
+  }
+}
+.executiveHero {
+  border: 1px solid var(--border);
+  background: linear-gradient(120deg, var(--accent-soft), var(--surface));
+  padding: 32px;
+  border-radius: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.executiveHero h2 {
+  font-size: clamp(25px, 3vw, 40px);
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--accent);
+  letter-spacing: -1px;
+}
+.whiteBow {
+  color: white;
+  font-size: 100px;
+  opacity: 0.8;
+  transform: rotate(-15deg);
+  text-shadow: 0 3px 30px #5f174b44;
+}
+.dailyMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.dailyMetrics article {
+  display: grid;
+  gap: 10px;
+}
+.dailyMetrics strong {
+  font-size: 38px;
+  font-weight: 500;
+  color: var(--accent);
+}
+.dailyMetrics small {
+  color: var(--muted);
+}
+#overviewCharts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin: 20px 0;
+}
+.previousDay {
+  margin-bottom: 20px;
+}
+.executiveDashboard .chartCard {
+  position: relative;
+  overflow: hidden;
+}
+.executiveDashboard .chartCard:after {
+  content: "";
+  position: absolute;
+  right: -32px;
+  top: -35px;
+  width: 100px;
+  height: 60px;
+  border: 7px solid var(--accent);
+  border-radius: 50%;
+  transform: rotate(-35deg);
+  opacity: 0.05;
+  pointer-events: none;
+}
+@media (max-width: 750px) {
+  .dailyMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #overviewCharts {
+    grid-template-columns: 1fr;
+  }
+  .executiveHero {
+    padding: 22px;
+  }
+  .whiteBow {
+    font-size: 60px;
+  }
+  .mawadaLogo {
+    width: 110px;
+    height: 52px;
+  }
+}
