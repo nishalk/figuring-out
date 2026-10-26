@@ -56,3 +56,9 @@ The header's **Suggest an improvement** link opens a GitHub issue form with fiel
 `server.js` now starts the web listener independently from `application.js` initialization. Missing production secrets or database failures produce a setup-status screen and a JSON error code instead of intentionally terminating the server. It does not bypass account protection or silently change storage backends. `/health/live` checks the web listener; `/health/ready` returns 503 until the real application has initialized. The sample demo remains available while configuration is incomplete. Supabase requests have a 15-second timeout.
 
 Run `npm run test:browser` after `npx playwright install chromium` to exercise the sample demo and configuration-failure screen. On this cloud machine, `CHROMIUM_PATH=/usr/bin/chromium npm run test:browser` uses installed Chromium. The browser test does not establish live Hostinger connectivity.
+
+## Workspace appearance and navigation
+
+Use **Appearance** in the header to choose Light, Dark, or System. The preference is saved in that browser; System follows the device setting. Both themes also apply to dialogs, forms, the sample demo and setup screens. Printed AWB labels stay white for barcode readability.
+
+The order board supports AWB/reference/recipient/vendor search, status filtering (including clickable summary cards), sorting, result counts and clear-filter empty states. Expand an order's **Manage workflow** section for assignment, pickup, warehouse and delivery actions. A progress strip and next-step hint summarize its stage. On phones, workspace navigation moves above the board. Successful actions and errors appear as accessible notifications. Order entry supports removing extra item rows and returns to the board after a successful save.

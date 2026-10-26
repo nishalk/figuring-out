@@ -33,13 +33,80 @@ async function api(url, body) {
     });
   return j;
 }
+let toastTimer;
+function toast(message, type = "success") {
+  const el = $("#toast");
+  clearTimeout(toastTimer);
+  el.textContent = message;
+  el.dataset.type = type;
+  el.hidden = false;
+  el.setAttribute("role", type === "error" ? "alert" : "status");
+  toastTimer = setTimeout(
+    () => (el.hidden = true),
+    type === "error" ? 8000 : 3500,
+  );
+}
+let busy = false;
 async function run(fn) {
+  if (busy) return;
+  busy = true;
+  const trigger =
+    document.activeElement instanceof HTMLButtonElement
+      ? document.activeElement
+      : null;
+  if (trigger) {
+    trigger.disabled = true;
+    trigger.setAttribute("aria-busy", "true");
+  }
   try {
     await fn();
-  } catch (e) {
-    alert(e.message);
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    busy = false;
+    if (trigger) {
+      trigger.disabled = false;
+      trigger.removeAttribute("aria-busy");
+    }
   }
 }
+const symbols = {
+  orders: "M3 6h18M3 12h18M3 18h18",
+  plus: "M12 5v14M5 12h14",
+  vendor: "M3 10l2-6h14l2 6M4 10v10h16V10M9 20v-7h6v7",
+  users:
+    "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87",
+  box: "M3 7l9-5 9 5v10l-9 5-9-5V7zm0 0l9 5 9-5M12 12v10M7.5 4.5l9 5",
+  truck: "M3 6h11v12H3zM14 10h4l3 4v4h-7M5 18a2 2 0 1 0 4 0m7 0a2 2 0 1 0 4 0",
+  check: "M5 12l4 4L19 6",
+  clock: "M12 8v4l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
+  search: "M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
+  warehouse: "M3 21V9l9-6 9 6v12M7 21V11h10v10M7 15h10M7 18h10",
+  alert: "M12 8v5m0 3v1M10 3L2 19h20L14 3z",
+};
+const icon = (name) =>
+  `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${symbols[name] || symbols.box}"/></svg>`;
+const statuses = [
+  "Created",
+  "Picked up",
+  "At warehouse",
+  "Out for delivery",
+  "Delivery failed",
+  "Delivered",
+];
+const statusClass = (status) =>
+  ({
+    Created: "created",
+    "Picked up": "picked",
+    "At warehouse": "warehouse",
+    "Out for delivery": "transit",
+    "Delivery failed": "failed",
+    Delivered: "delivered",
+  })[status] || "created";
+let searchQuery = "",
+  statusFilter = "",
+  sortOrder = "newest",
+  selectedOrder = null;
 const field = (name, label, type = "text") =>
   `<label>${label}<input name="${name}" type="${type}" required></label>`;
 async function boot() {
@@ -76,31 +143,81 @@ function auth(setup, keyRequired = false) {
 function render() {
   const admin = state.user.role === "admin",
     ops = admin || state.user.role === "operations";
+  const pages = [
+    { id: "orders", label: "Orders", symbol: "orders" },
+    ...(ops
+      ? [
+          { id: "create", label: "New order / Excel", symbol: "plus" },
+          { id: "vendors", label: "Vendors", symbol: "vendor" },
+        ]
+      : []),
+    ...(admin ? [{ id: "users", label: "Team access", symbol: "users" }] : []),
+  ];
+  if (!pages.some((p) => p.id === view)) view = "orders";
   $("#logout").hidden = false;
-  app.innerHTML = `<div class="row"><div><p class="muted">OPERATIONS WORKSPACE · KUWAIT</p>${admin ? `<p class="muted">${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</p>` : ""}<h1>Your deliveries, connected.</h1></div><span>${esc(state.user.name)} · ${esc(state.user.role)}</span></div><div class="grid stats">${["Created", "Picked up", "At warehouse", "Out for delivery", "Delivery failed", "Delivered"].map((s) => `<section><span class="muted">${s}</span><strong>${state.orders.filter((o) => o.status === s).length}</strong></section>`).join("")}</div><nav><button data-view="orders">Orders</button>${ops ? '<button data-view="create">New order / Excel</button><button data-view="vendors">Vendors</button>' : ""}${admin ? '<button data-view="users">Team access</button>' : ""}</nav><div id="content"></div>`;
+  const titles = {
+    orders: "Every delivery. One clear view.",
+    create: "A new journey starts here.",
+    vendors: "Your pickup network.",
+    users: "The people who keep it moving.",
+  };
+  app.innerHTML = `<div class="appShell"><aside class="workspaceSidebar"><div class="workspaceLabel">WORKSPACE <span class="liveDot"></span></div><div class="workspaceName">Kuwait operations<small>One warehouse · Online delivery</small></div><nav aria-label="Workspace navigation">${pages.map((p) => `<button data-view="${p.id}" class="${view === p.id ? "active" : ""}" ${view === p.id ? 'aria-current="page"' : ""}>${icon(p.symbol)}<span>${p.label}</span>${p.id === "orders" ? `<span class="navCount">${state.orders.length}</span>` : ""}</button>`).join("")}</nav><div class="sidebarNote">${icon("check")}<div>Complete orders only<small>Every item checked before dispatch.</small></div></div><div class="userCard"><span class="avatar">${esc(state.user.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.role)}</small></div></div></aside><div class="workspaceMain"><div class="pageHeading"><div><div class="eyebrow">OPERATIONS / ${esc(pages.find((p) => p.id === view).label.toUpperCase())}</div><h1>${titles[view]}</h1><p class="muted">${view === "orders" ? "Track pickups, consolidate with confidence, and keep deliveries moving." : "Everything your team needs, without the extra steps."}</p></div>${ops && view === "orders" ? `<button class="primary" id="quickCreate">${icon("plus")} Create order</button>` : ""}</div>${admin ? `<div class="storageNote"><span class="liveDot"></span>${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</div>` : ""}${view === "orders" ? `<div class="stats">${statuses.map((s, i) => `<button class="stat ${statusClass(s)} ${statusFilter === s ? "selected" : ""}" data-status="${s}" aria-pressed="${statusFilter === s}"><div class="statTop"><span>${s}</span>${icon(["box", "truck", "warehouse", "truck", "alert", "check"][i])}</div><div class="statBottom"><strong>${state.orders.filter((o) => o.status === s).length}</strong><span>View orders</span></div></button>`).join("")}</div>` : ""}<div id="content"></div><footer class="workspaceFooter"><span>Relay · Kuwait operations</span><span>Pickup → Warehouse → Delivery</span></footer></div></div>`;
   document.querySelectorAll("[data-view]").forEach(
     (b) =>
       (b.onclick = () => {
         view = b.dataset.view;
         render();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }),
+  );
+  if ($("#quickCreate"))
+    $("#quickCreate").onclick = () => {
+      view = "create";
+      render();
+    };
+  document.querySelectorAll("[data-status]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        statusFilter =
+          statusFilter === b.dataset.status ? "" : b.dataset.status;
+        render();
       }),
   );
   const c = $("#content");
   if (view === "orders") orders(c);
-  if (view === "create" && ops) create(c);
-  if (view === "vendors" && ops) vendors(c);
-  if (view === "users" && admin) users(c);
+  if (view === "create") create(c);
+  if (view === "vendors") vendors(c);
+  if (view === "users") users(c);
 }
-async function refresh() {
+async function refresh(message = "Workspace updated") {
   state = await api("state");
   render();
+  toast(message);
 }
 function bindForm(id, path, transform = (x) => x) {
   $(id).onsubmit = (e) => {
     e.preventDefault();
     run(async () => {
-      await api(path, transform(Object.fromEntries(new FormData(e.target))));
-      await refresh();
+      const result = await api(
+        path,
+        transform(Object.fromEntries(new FormData(e.target))),
+      );
+      if (path === "orders") {
+        view = "orders";
+        searchQuery = "";
+        statusFilter = "";
+        selectedOrder = result.id || null;
+        sortOrder = "newest";
+      }
+      await refresh(
+        path === "orders"
+          ? "Order created successfully"
+          : path === "vendors"
+            ? "Vendor location saved"
+            : path === "users"
+              ? "Team member created"
+              : "Workspace updated",
+      );
     });
   };
 }
@@ -114,13 +231,28 @@ function users(c) {
 }
 function create(c) {
   c.innerHTML = `<section><h2>Create order</h2><form id="order"><div class="grid">${field("reference", "Your order reference")}${field("recipient", "Recipient name")}${field("phone", "Phone (+965 followed by 8 digits)")}${field("address", "Delivery address")}</div><h3>Items and pickups</h3><div id="items"></div><button type="button" id="add">Add item</button><button>Create order</button></form></section><section><h2>Upload Excel (.xlsx)</h2><p>First row must contain these columns in this order: reference, recipient, phone, address, vendorCode, name, quantity. Use one row per item; repeat order details for additional items. Format phone cells as text.</p><input id="excel" type="file" accept=".xlsx"><button id="preview">Validate and preview</button><div id="previewResult"></div></section>`;
-  const add = () =>
+  const updateRemove = () =>
+    document
+      .querySelectorAll(".removeItem")
+      .forEach(
+        (button) => (button.disabled = $("#items").children.length === 1),
+      );
+  const add = () => {
     $("#items").insertAdjacentHTML(
       "beforeend",
-      `<div class="grid item"><label>Vendor<select class="vendor">${state.vendors.map((v) => `<option value="${esc(v.code)}">${esc(v.name)} (${esc(v.code)})</option>`).join("")}</select></label><label>Item<input class="name" required></label><label>Quantity<input class="quantity" type="number" min="1" step="1" value="1" required></label></div>`,
+      `<div class="grid item"><label>Vendor<select class="vendor">${state.vendors.map((v) => `<option value="${esc(v.code)}">${esc(v.name)} (${esc(v.code)})</option>`).join("")}</select></label><label>Item<input class="name" required></label><label>Quantity<input class="quantity" type="number" min="1" step="1" value="1" required></label><button type="button" class="removeItem ghost" aria-label="Remove item">Remove item</button></div>`,
     );
+    updateRemove();
+  };
   add();
   $("#add").onclick = add;
+  $("#items").onclick = (event) => {
+    const button = event.target.closest(".removeItem");
+    if (button && $("#items").children.length > 1) {
+      button.closest(".item").remove();
+      updateRemove();
+    }
+  };
   bindForm("#order", "orders", (b) => ({
     ...b,
     items: [...document.querySelectorAll("#items .item")].map((i) => ({
@@ -146,6 +278,32 @@ function create(c) {
         });
     });
 }
+function nextStep(o) {
+  return (
+    {
+      Created: "Collect items from each vendor",
+      "Picked up": "Check items into the warehouse",
+      "At warehouse": "Verify the full manifest and dispatch",
+      "Out for delivery": "Capture proof at the recipient’s door",
+      "Delivery failed": o.returned
+        ? "Ready for rescheduling"
+        : "Confirm items returned to the warehouse",
+      Delivered: "Delivery complete · proof recorded",
+    }[o.status] || ""
+  );
+}
+function journey(o) {
+  const active =
+    {
+      Created: 0,
+      "Picked up": 1,
+      "At warehouse": 1,
+      "Out for delivery": 2,
+      "Delivery failed": 2,
+      Delivered: 3,
+    }[o.status] ?? 0;
+  return `<ol class="journey" aria-label="Order progress">${["Pickup", "Warehouse", "On the road", "Delivered"].map((label, i) => `<li class="${i < active || (i === 3 && active === 3) ? "done" : i === active ? "current" : ""}"><span>${i < active || (i === 3 && active === 3) ? icon("check") : i + 1}</span><small>${label}</small></li>`).join("")}</ol>`;
+}
 function orders(c) {
   const manager = ["admin", "operations"].includes(state.user.role),
     warehouse = ["admin", "warehouse"].includes(state.user.role);
@@ -154,13 +312,18 @@ function orders(c) {
     `<select name="driver" required><option value="">Choose driver</option>${drivers.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join("")}</select>`;
   const button = (o, action, label, extra = "") =>
     `<button data-order="${o.id}" data-action="${action}" ${extra}>${label}</button>`;
-  c.innerHTML = `<h2>Order board</h2>${!state.orders.length ? "<section>No orders yet. Add vendors, then create an order or upload Excel.</section>" : ""}${state.orders
+  if (!selectedOrder && state.orders.length) selectedOrder = state.orders[0].id;
+  c.innerHTML = `<div class="boardHeading"><div><h2>Order board</h2><p class="muted" id="resultCount"></p></div><button class="ghost" id="expandOrders">Expand all</button></div><div class="orderToolbar"><label class="searchField">${icon("search")}<input id="orderSearch" type="search" aria-label="Search orders" placeholder="Search AWB, recipient, vendor or reference…" value="${esc(searchQuery)}"></label><label class="filterField"><span class="sr-only">Filter by status</span><select id="statusFilter" aria-label="Filter by status"><option value="">All statuses</option>${statuses.map((s) => `<option ${statusFilter === s ? "selected" : ""}>${s}</option>`).join("")}</select></label><label class="filterField"><span class="sr-only">Sort orders</span><select id="orderSort" aria-label="Sort orders"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="reference">Order reference</option></select></label></div><section id="noResults" class="emptyState" hidden>${icon("search")}<h3>No matching orders</h3><p class="muted">Try a different reference or clear your filters.</p><button id="clearFilters" class="secondary">Clear filters</button></section><div id="orderList">${state.orders
     .map(
-      (o) => `<section>
- <div class="row"><div><b>${esc(o.awb)}</b><p>${esc(o.reference)} · ${esc(o.recipient)}</p></div><span class="badge">${esc(o.status)}</span></div>
- <p>${esc(o.address)} · <a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></p>
- <p>Delivery driver: ${esc(state.users.find((u) => u.id === o.driver)?.name || (o.driver ? "Assigned" : "Unassigned"))}${o.deliveryDate ? " · Scheduled " + esc(o.deliveryDate) : ""}</p>
- ${button(o, "label", "Print AWB label")}
+      (
+        o,
+      ) => `<section class="orderCard" data-id="${o.id}" data-status-value="${esc(o.status)}" data-search="${esc([o.awb, o.reference, o.recipient, o.address, o.phone, ...o.items.map((i) => i.vendor.name), state.users.find((u) => u.id === o.driver)?.name || ""].join(" ").toLowerCase())}">
+ <div class="orderTop"><div class="orderIdentity"><span class="orderIcon">${icon("box")}</span><div><span class="overline">AIR WAYBILL</span><b>${esc(o.awb)}</b><small>Ref. ${esc(o.reference)}</small></div></div><span class="badge ${statusClass(o.status)}">${esc(o.status)}</span></div>
+ <div class="orderSummary"><div class="orderDestination"><h3>${esc(o.recipient)}</h3><p>${esc(o.address)}</p><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></div><div class="orderFacts"><span>${o.pickups.length} vendor pickups</span><span>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</span></div></div>
+ ${journey(o)}
+ <div class="orderActionRow"><span class="nextStep">${icon(o.status === "Delivered" ? "check" : "clock")}${esc(nextStep(o))}</span>${button(o, "label", "Print AWB label")}</div>
+ <details class="orderWorkflow" ${selectedOrder === o.id ? "open" : ""}><summary><span>${icon("orders")} Manage workflow</span><span>${o.items.filter((i) => i.received).length}/${o.items.length} items received</span></summary><div class="orderBody">
+ <p class="assignmentLabel">Delivery driver: ${esc(state.users.find((u) => u.id === o.driver)?.name || (o.driver ? "Assigned" : "Unassigned"))}${o.deliveryDate ? " · Scheduled " + esc(o.deliveryDate) : ""}</p>
  <h3>Vendor pickups</h3>${o.pickups
    .map(
      (
@@ -184,9 +347,73 @@ function orders(c) {
  ${o.status === "At warehouse" && (manager || (state.user.role === "driver" && o.driver === state.user.id)) ? button(o, "Out for delivery", "Verify manifest and dispatch") : ""}
  ${o.status === "Out for delivery" && (manager || (state.user.role === "driver" && o.driver === state.user.id)) ? button(o, "Delivered", "Record delivery") + button(o, "fail", "Delivery unsuccessful") : ""}
  ${o.status === "Delivery failed" ? `<p>Latest failure: ${esc(o.attempts?.at(-1)?.reason)}</p><p>${o.returned ? "Returned to warehouse" : "Awaiting warehouse return confirmation"}</p>${warehouse && !o.returned ? button(o, "return", "Confirm physical return") : ""}${manager && o.returned ? `<form class="reschedule" data-order="${o.id}">${field("date", "New delivery date", "date")}<button>Reschedule</button></form>` : ""}` : ""}
- <details><summary>History and proof</summary>${o.history.map((h) => `<p>${esc(h.event)} · ${esc(h.by || "")} · ${new Date(h.at).toLocaleString("en-GB", { timeZone: "Asia/Kuwait" })}${h.reason ? " · " + esc(h.reason) : ""}${h.date ? " · " + esc(h.date) : ""}${h.item ? " · item " + esc(h.item) : ""}</p>`).join("")}${(o.proofs || []).map((p) => `<p>${esc(p.stage)} · ${esc(p.vendor || "")} · ${esc(p.name)} · GPS ${p.lat}, ${p.lng}</p><img width="180" src="${p.photo}" alt="Handover photo">${p.signature ? `<img width="180" src="${p.signature}" alt="Recipient signature">` : ""}`).join("")}</details></section>`,
+ <details><summary>History and proof</summary>${o.history.map((h) => `<p>${esc(h.event)} · ${esc(h.by || "")} · ${new Date(h.at).toLocaleString("en-GB", { timeZone: "Asia/Kuwait" })}${h.reason ? " · " + esc(h.reason) : ""}${h.date ? " · " + esc(h.date) : ""}${h.item ? " · item " + esc(h.item) : ""}</p>`).join("")}${(o.proofs || []).map((p) => `<p>${esc(p.stage)} · ${esc(p.vendor || "")} · ${esc(p.name)} · GPS ${p.lat}, ${p.lng}</p><img width="180" src="${p.photo}" alt="Handover photo">${p.signature ? `<img width="180" src="${p.signature}" alt="Recipient signature">` : ""}`).join("")}</details></div></details></section>`,
     )
-    .join("")}`;
+    .join("")}</div>`;
+  $("#orderSort").value = sortOrder;
+  const applyFilters = () => {
+    const cards = [...document.querySelectorAll("#orderList > .orderCard")];
+    cards.forEach(
+      (card) =>
+        (card.hidden = Boolean(
+          (statusFilter && card.dataset.statusValue !== statusFilter) ||
+          (searchQuery.trim() &&
+            !card.dataset.search.includes(searchQuery.trim().toLowerCase())),
+        )),
+    );
+    const count = cards.filter((card) => !card.hidden).length;
+    $("#resultCount").textContent =
+      `Showing ${count} of ${cards.length} ${cards.length === 1 ? "order" : "orders"}`;
+    $("#noResults").hidden = count !== 0;
+    document.querySelectorAll("[data-status]").forEach((b) => {
+      b.classList.toggle("selected", b.dataset.status === statusFilter);
+      b.setAttribute("aria-pressed", String(b.dataset.status === statusFilter));
+    });
+    cards
+      .sort((a, b) => {
+        const one = state.orders.find((o) => o.id === a.dataset.id),
+          two = state.orders.find((o) => o.id === b.dataset.id);
+        if (sortOrder === "reference")
+          return one.reference.localeCompare(two.reference);
+        const date = new Date(two.history[0].at) - new Date(one.history[0].at);
+        return sortOrder === "oldest" ? -date : date;
+      })
+      .forEach((card) => $("#orderList").append(card));
+  };
+  $("#orderSearch").oninput = (e) => {
+    searchQuery = e.target.value;
+    applyFilters();
+  };
+  $("#statusFilter").onchange = (e) => {
+    statusFilter = e.target.value;
+    applyFilters();
+  };
+  $("#orderSort").onchange = (e) => {
+    sortOrder = e.target.value;
+    applyFilters();
+  };
+  $("#clearFilters").onclick = () => {
+    searchQuery = "";
+    statusFilter = "";
+    $("#orderSearch").value = "";
+    $("#statusFilter").value = "";
+    applyFilters();
+    $("#orderSearch").focus();
+  };
+  $("#expandOrders").onclick = () => {
+    const details = [...document.querySelectorAll(".orderWorkflow")].filter(
+      (d) => !d.closest("section").hidden,
+    );
+    const open = details.some((d) => !d.open);
+    details.forEach((d) => (d.open = open));
+    $("#expandOrders").textContent = open ? "Collapse all" : "Expand all";
+  };
+  document.querySelectorAll(".orderWorkflow").forEach((d) =>
+    d.addEventListener("toggle", () => {
+      if (d.open) selectedOrder = d.closest("section").dataset.id;
+    }),
+  );
+  applyFilters();
   for (const [selector, action] of [
     [".taskAssign", "assign-pickup"],
     [".deliveryAssign", "assign"],

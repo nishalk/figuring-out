@@ -49,16 +49,81 @@ const fs = require("node:fs"),
       .waitFor();
     await page.getByRole("link", { name: "Try the sample-data demo" }).click();
     await page.getByRole("heading", { name: "Order board" }).waitFor();
-    assert.equal(await page.locator("#content > section").count(), 3);
+    assert.equal(await page.locator("#orderList > section").count(), 3);
     assert.equal(
       await page
         .getByRole("link", { name: "Suggest an improvement" })
         .getAttribute("target"),
       "_blank",
     );
+    // Appearance preference survives reloads, and System tracks the device.
+    await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    await page.reload();
+    await page.getByRole("heading", { name: "Order board" }).waitFor();
+    assert.equal(
+      await page.getByLabel("Appearance", { exact: true }).inputValue(),
+      "dark",
+    );
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: path.join(os.tmpdir(), "relay-ui-dark.png"),
+      animations: "disabled",
+    });
+    await page.getByLabel("Appearance", { exact: true }).selectOption("light");
+    await page.screenshot({
+      path: path.join(os.tmpdir(), "relay-ui-light.png"),
+      animations: "disabled",
+    });
+    await page.getByLabel("Appearance", { exact: true }).selectOption("system");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.waitForFunction(
+      () => document.documentElement.dataset.theme === "dark",
+    );
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    await page.getByLabel("Appearance", { exact: true }).selectOption("light");
+    await page.setViewportSize({ width: 412, height: 915 });
+    // Search/filter controls really narrow the board and recover from an empty result.
+    await page
+      .getByRole("searchbox", { name: "Search orders" })
+      .fill("SAMPLE-1002");
+    assert.equal(await page.locator("#orderList > section:visible").count(), 1);
+    await page
+      .getByRole("searchbox", { name: "Search orders" })
+      .fill("no-such-order");
+    await page.getByRole("heading", { name: "No matching orders" }).waitFor();
+    await page
+      .getByRole("button", { name: "Clear filters", exact: true })
+      .click();
+    assert.equal(await page.locator("#orderList > section:visible").count(), 3);
+    await page.locator('[data-status="Out for delivery"]').click();
+    assert.equal(await page.locator("#orderList > section:visible").count(), 1);
+    assert.equal(
+      await page.getByLabel("Filter by status").inputValue(),
+      "Out for delivery",
+    );
+    await page.getByLabel("Filter by status").selectOption("");
+    await page.getByLabel("Sort orders").selectOption("reference");
+    assert.ok(
+      (
+        await page.locator("#orderList > section").first().textContent()
+      ).includes("SAMPLE-1001"),
+    );
+    await page
+      .getByRole("button", { name: "New order / Excel", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Validate and preview", exact: true })
+      .click();
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Select a workbook" })
+      .waitFor();
+    await page.getByRole("button", { name: /^Orders/ }).click();
     // The first sample order requires two separately verified vendor handovers.
     const order = () =>
-      page.locator("#content > section").filter({ hasText: "SAMPLE-1001" });
+      page.locator("#orderList > section").filter({ hasText: "SAMPLE-1001" });
     for (let i = 0; i < 2; i++) {
       await order()
         .getByRole("button", { name: "Verify items and record pickup" })
@@ -141,6 +206,60 @@ const fs = require("node:fs"),
       await order().locator(".badge").filter({ hasText: "Delivered" }).count(),
       1,
     );
+    // A removable item row and a successful create return the operator to the board.
+    await page
+      .getByRole("button", { name: "New order / Excel", exact: true })
+      .click();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Remove item", exact: true })
+        .isDisabled(),
+      true,
+    );
+    await page.getByRole("button", { name: "Add item", exact: true }).click();
+    assert.equal(await page.locator("#items .item").count(), 2);
+    await page
+      .getByRole("button", { name: "Remove item", exact: true })
+      .last()
+      .click();
+    assert.equal(await page.locator("#items .item").count(), 1);
+    await page
+      .getByLabel("Your order reference", { exact: true })
+      .fill("UX-TEST-ORDER");
+    await page
+      .getByLabel("Recipient name", { exact: true })
+      .fill("Sample UI test");
+    await page
+      .getByLabel("Phone (+965 followed by 8 digits)", { exact: true })
+      .fill("+96500000000");
+    await page
+      .getByLabel("Delivery address", { exact: true })
+      .fill("Fictional Kuwait address");
+    await page.locator("#items .name").fill("Sample parcel");
+    await page
+      .getByRole("button", { name: "Create order", exact: true })
+      .click();
+    await page.getByRole("heading", { name: "Order board" }).waitFor();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "Order created successfully" })
+      .waitFor();
+    assert.ok(
+      (
+        await page.locator("#orderList > section").first().textContent()
+      ).includes("UX-TEST-ORDER"),
+    );
+    for (const width of [360, 412, 768, 1440]) {
+      await page.setViewportSize({ width, height: 915 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+        true,
+        `No overflow at ${width}px`,
+      );
+    }
+    await page.setViewportSize({ width: 412, height: 915 });
     assert.deepEqual(errors, []);
     assert.equal(
       await page.evaluate(
@@ -153,7 +272,7 @@ const fs = require("node:fs"),
       fullPage: true,
     });
     console.log(
-      "Browser smoke passed: configuration diagnostics, isolated sample demo, two vendor pickups, no partial dispatch, delivery signature, barcode printing, role switching and session persistence.",
+      "Browser smoke passed: persistent light/dark/system themes, responsive desktop/mobile layouts, order search/filter/sort, empty states, error notifications, role navigation and complete delivery workflow.",
     );
   } finally {
     if (browser) await browser.close();
