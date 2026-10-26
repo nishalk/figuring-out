@@ -218,6 +218,12 @@
         driverId: o.driver,
         createdAt: o.history[0]?.at || null,
         deliveryDate: o.deliveryDate || null,
+        timeSlot: o.timeSlot || "",
+        amountFils: o.amountFils ?? null,
+        ringBell: o.ringBell ?? null,
+        cardAvailable: o.cardAvailable ?? null,
+        extraDirections: o.extraDirections || "",
+        occasion: o.occasion || null,
         items: o.items.map((i) => ({
           name: i.name,
           quantity: i.quantity,

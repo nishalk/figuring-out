@@ -26,6 +26,13 @@ async function api(url, body) {
       body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
   });
   const j = await r.json();
+  if (!r.ok && j.errors?.length)
+    j.error +=
+      " " +
+      j.errors
+        .slice(0, 5)
+        .map((e) => "Row " + e.row + ": " + e.error)
+        .join("; ");
   if (!r.ok)
     throw Object.assign(Error(j.error || "Request failed"), {
       status: r.status,
@@ -236,7 +243,7 @@ function users(c) {
   bindForm("#user", "users");
 }
 function create(c) {
-  c.innerHTML = `<section><h2>Create order</h2><form id="order"><div class="grid">${field("reference", "Your order reference")}${field("recipient", "Recipient name")}${field("phone", "Phone (+965 followed by 8 digits)")}${field("address", "Delivery address")}</div><h3>Items and pickups</h3><div id="items"></div><button type="button" id="add">Add item</button><button>Create order</button></form></section><section><h2>Upload Excel (.xlsx)</h2><p>First row must contain these columns in this order: reference, recipient, phone, address, vendorCode, name, quantity. Use one row per item; repeat order details for additional items. Format phone cells as text.</p><input id="excel" type="file" accept=".xlsx"><button id="preview">Validate and preview</button><div id="previewResult"></div></section>`;
+  c.innerHTML = `<section><h2>Create order</h2><form id="order"><div class="grid">${field("reference", "Your order reference")}${field("recipient", "Recipient name")}${field("phone", "Phone (+965 followed by 8 digits)")}${field("address", "Delivery address")}</div><h3>Items and pickups</h3><div id="items"></div><button type="button" id="add">Add item</button><button>Create order</button></form></section><section><h2>Upload Excel (.xlsx)</h2><label>Export format<select id="importFormat"><option value="mawada">Mawada CMS · deliveries due today (Kuwait)</option><option value="template">Relay item-row template</option></select></label><p>Mawada: use named columns for Order Number, Recipient Delivery Date, Recipient Name, Recipient Phone, Recipient Address, Vendor Name, Item Details and Quantity. Only deliveries due today in Kuwait are selected. Use one row per item. For the Relay template, use reference, recipient, phone, address, vendorCode, name, quantity in that order.</p><input id="excel" type="file" accept=".xlsx"><button id="preview">Validate and preview</button><div id="previewResult"></div></section>`;
   const updateRemove = () =>
     document
       .querySelectorAll(".removeItem")
@@ -273,12 +280,13 @@ function create(c) {
       if (!file) throw Error("Select a workbook");
       const f = new FormData();
       f.append("file", file);
-      const result = await api("import", f);
+      const format = $("#importFormat").value;
+      const result = await api("import?format=" + format, f);
       $("#previewResult").innerHTML =
-        `<p>${result.count} valid orders</p>${result.orders.map((o) => `<p>${esc(o.reference)} · ${esc(o.recipient)} · ${o.items.length} items</p>`).join("")}<button id="confirm">Confirm import</button>`;
+        `<p>${result.count} valid orders${result.today ? " due " + esc(result.today) + " in Kuwait · " + result.excluded.length + " rows excluded" : ""}</p>${result.excluded?.length ? `<details><summary>Excluded rows</summary>${result.excluded.map((row) => `<p>Row ${row.row}: ${esc(row.reason)}</p>`).join("")}</details>` : ""}${result.orders.map((o) => `<section class="importPreview"><strong>${esc(o.reference)} · ${esc(o.recipient)}</strong><p>${esc(o.phone)} · ${esc(o.address)}</p><p>${o.items.map((i) => esc(i.name) + " × " + i.quantity + " · " + esc(i.vendor?.name || i.vendorCode)).join("<br>")}</p>${o.source === "Mawada CMS" ? `<p>${esc(o.deliveryDate)} · ${esc(o.timeSlot || "No slot provided")} · ${o.amountFils == null ? "Value not provided" : (o.amountFils / 1000).toFixed(3) + " KWD"}</p><p>Ring bell: ${o.ringBell == null ? "Not provided" : o.ringBell ? "Yes" : "No"} · Card: ${o.cardAvailable == null ? "Not provided" : o.cardAvailable ? "Yes" : "No"}</p><p>${esc(o.extraDirections || "No extra directions")}</p><p>Occasion: ${esc(o.occasion?.value || "Unknown")} ${o.occasion?.needsReview ? "· Requires review" : ""}</p>` : ""}</section>`).join("")}<button id="confirm" ${result.count ? "" : "disabled"}>Confirm import</button>`;
       $("#confirm").onclick = () =>
         run(async () => {
-          await api("import?confirm=yes", f);
+          await api("import?confirm=yes&format=" + format, f);
           view = "orders";
           await refresh();
         });
@@ -297,6 +305,10 @@ function nextStep(o) {
       Delivered: "Delivery complete · proof recorded",
     }[o.status] || ""
   );
+}
+function orderDeliveryNotes(o) {
+  if (o.source !== "Mawada CMS") return "";
+  return `<div class="orderNotes"><strong>Delivery instructions</strong><p>${o.deliveryDate ? esc(o.deliveryDate) : ""} ${esc(o.timeSlot || "")} · Order amount ${o.amountFils == null ? "not provided" : (o.amountFils / 1000).toFixed(3) + " KWD"}</p><p>Ring bell: ${o.ringBell == null ? "Not provided" : o.ringBell ? "Yes" : "No"} · Card available: ${o.cardAvailable == null ? "Not provided" : o.cardAvailable ? "Yes" : "No"}</p><p>${esc(o.extraDirections || "No extra directions")}</p><p>Occasion: ${esc(o.occasion?.value || "Unknown")}${o.occasion?.needsReview ? " · Unconfirmed suggestion" : ""}</p>${["admin", "operations"].includes(state.user.role) ? `<form class="occasionReview" data-order="${o.id}"><label>Review occasion<input name="occasion" maxlength="120" required value="${esc(o.occasion?.value || "")}" placeholder="e.g. Birthday or Unknown"></label><button>Confirm occasion</button></form>` : ""}</div>`;
 }
 function journey(o) {
   const active =
@@ -327,6 +339,7 @@ function orders(c) {
       ) => `<section class="orderCard" data-id="${o.id}" data-status-value="${esc(o.status)}" data-search="${esc([o.awb, o.reference, o.recipient, o.address, o.phone, ...o.items.map((i) => i.vendor.name), state.users.find((u) => u.id === o.driver)?.name || ""].join(" ").toLowerCase())}">
  <div class="orderTop"><div class="orderIdentity"><span class="orderIcon">${icon("box")}</span><div><span class="overline">AIR WAYBILL</span><b>${esc(o.awb)}</b><small>Ref. ${esc(o.reference)}</small></div></div><span class="badge ${statusClass(o.status)}">${esc(o.status)}</span></div>
  <div class="orderSummary"><div class="orderDestination"><h3>${esc(o.recipient)}</h3><p>${esc(o.address)}</p><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></div><div class="orderFacts"><span>${o.pickups.length} vendor pickups</span><span>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</span></div></div>
+ ${orderDeliveryNotes(o)}
  ${journey(o)}
  <div class="orderActionRow"><span class="nextStep">${icon(o.status === "Delivered" ? "check" : "clock")}${esc(nextStep(o))}</span>${button(o, "label", "Print AWB label")}</div>
  <details class="orderWorkflow" ${selectedOrder === o.id ? "open" : ""}><summary><span>${icon("orders")} Manage workflow</span><span>${o.items.filter((i) => i.received).length}/${o.items.length} items received</span></summary><div class="orderBody">
@@ -428,6 +441,7 @@ function orders(c) {
     [".deliveryAssign", "assign"],
     [".addItem", "add-item"],
     [".reschedule", "reschedule"],
+    [".occasionReview", "review-occasion"],
   ])
     document.querySelectorAll(selector).forEach(
       (f) =>

@@ -233,6 +233,19 @@ async function main() {
       items,
       status: "Created",
       driver: null,
+      ...(b.source === "Mawada CMS"
+        ? {
+            source: b.source,
+            deliveryDate: b.deliveryDate,
+            timeSlot: b.timeSlot,
+            amountFils: b.amountFils,
+            currency: "KWD",
+            ringBell: b.ringBell,
+            extraDirections: b.extraDirections,
+            cardAvailable: b.cardAvailable,
+            occasion: b.occasion,
+          }
+        : {}),
       history: [{ at: new Date().toISOString(), event: "Created" }],
     };
   }
@@ -264,6 +277,38 @@ async function main() {
         const sheet = wb.worksheets[0];
         if (!sheet || sheet.rowCount > 2001)
           throw Error("Use at most 2000 rows");
+        if (
+          q.query.format === "mawada" ||
+          sheet
+            .getRow(1)
+            .values.some(
+              (v) =>
+                String(v).trim().toLowerCase() === "recipient delivery date",
+            )
+        ) {
+          const parsed = require("./mawada-import").parseMawada(sheet, {
+            vendors: await all("vendors"),
+          });
+          if (parsed.errors.length)
+            return r.status(400).json({
+              error: "Mawada validation failed. No orders were imported.",
+              errors: parsed.errors,
+              excluded: parsed.excluded,
+              today: parsed.today,
+            });
+          const orders = await Promise.all(parsed.orders.map(prepareOrder));
+          if (q.query.confirm === "yes") {
+            if (!orders.length)
+              throw Error("No orders are due today in Kuwait.");
+            await store.insertMany("orders", orders);
+          }
+          return r.json({
+            ...parsed,
+            orders,
+            count: orders.length,
+            committed: q.query.confirm === "yes",
+          });
+        }
         const groups = new Map();
         sheet.eachRow((row, n) => {
           if (n === 1) return;
@@ -352,7 +397,24 @@ async function main() {
       operations.normaliseTrips(o);
       const at = new Date().toISOString();
       let detail = {};
-      if (
+      if (action === "review-occasion") {
+        if (!manager) return deny();
+        if (
+          o.source !== "Mawada CMS" ||
+          typeof q.body.occasion !== "string" ||
+          !q.body.occasion.trim() ||
+          q.body.occasion.length > 120
+        )
+          throw Error("Enter an occasion label for this Mawada order.");
+        o.occasion = {
+          value: q.body.occasion.trim(),
+          source: "Operations review",
+          needsReview: false,
+          reviewedBy: q.user.name,
+          reviewedAt: at,
+        };
+        detail = { occasion: o.occasion.value };
+      } else if (
         ["start-pickup-trip", "arrived-pickup", "pickup-failed"].includes(
           action,
         )

@@ -60,6 +60,23 @@
         ],
       }),
     );
+    Object.assign(orders[1], {
+      source: "Mawada CMS",
+      deliveryDate: new Date(Date.now() + 3 * 3600000)
+        .toISOString()
+        .slice(0, 10),
+      timeSlot: "14:00–17:00",
+      amountFils: 17500,
+      ringBell: false,
+      cardAvailable: true,
+      extraDirections: "Sample: use the side entrance; do not ring the bell.",
+      occasion: {
+        value: "Birthday",
+        source: "Sample unconfirmed suggestion",
+        needsReview: true,
+        candidates: ["Birthday"],
+      },
+    });
     const extra = clone(orders[1]);
     extra.id = "demo-order-3";
     extra.awb = "DEMO-KW-1004";
@@ -305,7 +322,17 @@
       const t = o.pickups.find((p) => p.id === b.pickup);
       RelayOperations.normaliseTrips(o);
       const at = new Date().toISOString();
-      if (
+      if (b.action === "review-occasion") {
+        assertManager();
+        if (!b.occasion?.trim()) fail("Enter an occasion label");
+        o.occasion = {
+          value: b.occasion.trim(),
+          source: "Operations review",
+          needsReview: false,
+          reviewedBy: current().name,
+          reviewedAt: at,
+        };
+      } else if (
         ["start-pickup-trip", "arrived-pickup", "pickup-failed"].includes(
           b.action,
         )

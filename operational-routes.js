@@ -136,6 +136,14 @@ module.exports = function install(app, store, permit) {
       "Longitude",
       "Photo",
       "Signature",
+      "Recipient Delivery Date",
+      "Delivery time slot",
+      "Order value (KWD)",
+      "Ring bell",
+      "Card available",
+      "Extra directions",
+      "Occasion",
+      "Occasion review required",
     ]);
     const history = book.addWorksheet("Order history");
     history.addRow([
@@ -190,6 +198,14 @@ module.exports = function install(app, store, permit) {
         d.lng ?? "",
         d.photoCaptured ? "Yes" : "No",
         d.signatureCaptured ? "Yes" : "No",
+        o.deliveryDate || "",
+        o.timeSlot,
+        o.amountFils == null ? "" : (o.amountFils / 1000).toFixed(3),
+        o.ringBell == null ? "" : o.ringBell ? "Yes" : "No",
+        o.cardAvailable == null ? "" : o.cardAvailable ? "Yes" : "No",
+        o.extraDirections,
+        o.occasion?.value || "",
+        o.occasion?.needsReview ? "Yes" : "No",
       ]);
       for (const h of o.history)
         history.addRow([

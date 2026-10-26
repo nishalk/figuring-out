@@ -238,6 +238,67 @@ test("multi-vendor pickup, consolidation, labels, failed delivery and rescheduli
     assert.equal((await req("state")).orders.length, 1);
     assert.equal((await req("import?confirm=yes", file)).count, 1);
     await req("import?confirm=yes", file, 400);
+    const mw = new ExcelJS.Workbook(),
+      ms = mw.addWorksheet("Mawada");
+    ms.addRow([
+      "Order Number",
+      "Recipient Delivery Date",
+      "Recipient Name",
+      "Recipient Phone",
+      "Recipient Address",
+      "Vendor Name",
+      "Item Details",
+      "Quantity",
+      "Order Amount",
+      "Ring the bell",
+      "Card available",
+    ]);
+    const cmsToday = require("../mawada-import").kuwaitDay();
+    ms.addRow([
+      "CMS-TODAY",
+      cmsToday,
+      "Sample receiver",
+      "50000000",
+      "Sample address",
+      "V1",
+      "Birthday bouquet",
+      1,
+      "12.345",
+      "N",
+      "Y",
+    ]);
+    ms.addRow([
+      "CMS-OTHER",
+      "2099-01-01",
+      "Other receiver",
+      "50000000",
+      "Sample address",
+      "V1",
+      "Item",
+      1,
+      "12.345",
+      "N",
+      "Y",
+    ]);
+    const mf = new FormData();
+    mf.append("file", new Blob([await mw.xlsx.writeBuffer()]), "cms.xlsx");
+    const preview = await req("import?format=mawada", mf);
+    assert.equal(preview.count, 1);
+    assert.equal(preview.excluded.length, 1);
+    const committed = await req("import?format=mawada&confirm=yes", mf);
+    const imported = committed.orders[0];
+    assert.equal(imported.amountFils, 12345);
+    assert.equal(imported.ringBell, false);
+    assert.equal(imported.occasion.needsReview, true);
+    await req("orders/" + imported.id + "/action", {
+      action: "review-occasion",
+      occasion: "Birthday",
+    });
+    assert.equal(
+      (await req("reports")).orders.find((o) => o.id === imported.id).occasion
+        .needsReview,
+      false,
+    );
   } finally {
     p.kill();
     await new Promise((r) => p.once("exit", r));
