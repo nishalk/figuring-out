@@ -57,6 +57,12 @@ const fs = require("node:fs"),
       .getByRole("heading", { name: "App setup needs attention" })
       .waitFor();
     await page.getByRole("link", { name: "Try the sample-data demo" }).click();
+    await page.locator(".executiveDashboard").waitFor();
+    assert.equal(
+      await page.locator("[data-view=dashboard]").getAttribute("aria-current"),
+      "page",
+    );
+    await page.locator("[data-view=orders]").click();
     await page.getByRole("heading", { name: "Order board" }).waitFor();
     assert.equal(await page.locator("#orderList > section").count(), 4);
     assert.equal(
@@ -104,6 +110,8 @@ const fs = require("node:fs"),
     await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
     assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
     await page.reload();
+    await page.locator(".executiveDashboard").waitFor();
+    await page.locator("[data-view=orders]").click();
     await page.getByRole("heading", { name: "Order board" }).waitFor();
     assert.equal(
       await page.getByLabel("Appearance", { exact: true }).inputValue(),
@@ -245,6 +253,8 @@ const fs = require("node:fs"),
       0,
     );
     await page.locator("#demoRole").selectOption("demo-admin");
+    await page.locator(".executiveDashboard").waitFor();
+    await page.locator("[data-view=orders]").click();
     await page.getByRole("heading", { name: "Order board" }).waitFor();
     assert.equal(
       await order().locator(".badge").filter({ hasText: "Delivered" }).count(),
@@ -298,6 +308,8 @@ const fs = require("node:fs"),
       .getByRole("button", { name: "Arrived at delivery", exact: true })
       .click();
     await page.locator("#demoRole").selectOption("demo-admin");
+    await page.locator(".executiveDashboard").waitFor();
+    await page.locator("[data-view=orders]").click();
     await page
       .getByRole("heading", { name: "Fleet control", exact: true })
       .waitFor();
@@ -403,6 +415,8 @@ const fs = require("node:fs"),
     await page.getByRole("button", { name: "Save proof", exact: true }).click();
     await page.locator("#proof").waitFor({ state: "hidden" });
     await page.locator("#demoRole").selectOption("demo-admin");
+    await page.locator(".executiveDashboard").waitFor();
+    await page.locator("[data-view=orders]").click();
     await page
       .getByRole("heading", { name: "Fleet control", exact: true })
       .waitFor();
@@ -484,6 +498,7 @@ const fs = require("node:fs"),
     const pollingPage = await context.newPage();
     await pollingPage.clock.install();
     await pollingPage.goto(url + "/demo");
+    await pollingPage.locator("[data-view=orders]").click();
     await pollingPage
       .getByRole("heading", { name: "Fleet control", exact: true })
       .waitFor();

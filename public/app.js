@@ -1,7 +1,7 @@
 const $ = (s) => document.querySelector(s),
   app = $("#app");
 let state,
-  view = "orders",
+  view = "dashboard",
   proofOrder,
   proofStage,
   proofPickup,
