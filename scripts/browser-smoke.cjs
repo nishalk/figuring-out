@@ -65,6 +65,27 @@ const fs = require("node:fs"),
         .getAttribute("target"),
       "_blank",
     );
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /Electric Orchid/ }).click();
+    assert.equal(
+      await page.locator("html").getAttribute("data-palette"),
+      "orchid",
+    );
+    await page.locator("input[name=accent]").fill("#efb1db");
+    await page
+      .getByRole("button", { name: "Save custom colours", exact: true })
+      .click();
+    await page.reload();
+    assert.equal(
+      await page
+        .locator("html")
+        .evaluate((el) => el.style.getPropertyValue("--accent")),
+      "#efb1db",
+    );
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /Midnight Burgundy/ }).click();
+    await page.locator("[data-view=orders]").click();
+    assert.equal(await page.locator("#dashboardCharts .chartCard").count(), 2);
     // Appearance preference survives reloads, and System tracks the device.
     await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
     assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");

@@ -2084,3 +2084,278 @@ canvas {
     transition: none;
   }
 }
+/* Alternative atmospheres and data visualisation. */
+:root[data-theme="dark"][data-palette="midnight"] {
+  --bg: #09080c;
+  --surface: #151118;
+  --surface-alt: #201823;
+  --text: #f8f2fa;
+  --muted: #bdaebf;
+  --border: #38263c;
+  --accent: #d99ac7;
+  --accent-hover: #edbfdf;
+  --accent-soft: #391c34;
+  --button-text: #220e1d;
+}
+:root[data-theme="dark"][data-palette="orchid"] {
+  --bg: #100b1c;
+  --surface: #1c142c;
+  --surface-alt: #281d3e;
+  --text: #faf5ff;
+  --muted: #beb0cf;
+  --border: #43325e;
+  --accent: #c3a0ff;
+  --accent-hover: #dcc6ff;
+  --accent-soft: #382451;
+}
+:root[data-theme="dark"][data-palette="cream"] {
+  --bg: #231321;
+  --surface: #311e2c;
+  --surface-alt: #402738;
+  --accent: #dda9cf;
+  --accent-soft: #503047;
+}
+:root[data-theme="dark"] .mawadaHero {
+  background: linear-gradient(115deg, var(--surface-alt), var(--bg));
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 70px #0004;
+}
+:root[data-theme="dark"] .mawadaHero h2 {
+  color: var(--accent);
+}
+:root[data-theme="dark"] .progressRing {
+  background:
+    radial-gradient(closest-side, var(--surface) 79%, transparent 80%),
+    conic-gradient(var(--accent) var(--progress), #ffffff18 0);
+}
+:root[data-theme="dark"] .heroDate {
+  border-color: var(--border);
+}
+:root[data-theme="dark"] .ribbonArt {
+  opacity: 0.15;
+  border-color: white;
+}
+:root[data-theme="dark"] .ribbonArt:after {
+  border-color: var(--accent);
+  opacity: 1;
+}
+#dashboardCharts {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.chartCard {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 24px;
+  min-width: 0;
+}
+.chartCard h3 {
+  font-size: 21px;
+  font-weight: 500;
+  margin: 10px 0;
+}
+.chartRow {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 24px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: var(--text);
+  padding: 9px 0;
+  text-align: left;
+  font-size: 11px;
+}
+.chartTrack {
+  height: 12px;
+  border-radius: 20px;
+  background: var(--surface-alt);
+  overflow: hidden;
+}
+.chartFill,
+.stacked i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 20px;
+  min-width: 0;
+  transform-origin: left;
+  animation: growBar 0.8s ease both;
+}
+.chartColour0 {
+  opacity: 0.45;
+}
+.chartColour1 {
+  opacity: 0.6;
+}
+.chartColour2 {
+  opacity: 0.75;
+}
+.chartColour4 {
+  background: var(--red);
+}
+.chartColour5 {
+  background: #b7a2ed;
+}
+.stacked {
+  display: flex;
+  height: 16px;
+}
+.stacked i + i {
+  background: #b7a2ed;
+}
+.driverChartRow {
+  display: grid;
+  gap: 9px;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  width: 100%;
+  padding: 12px 0;
+}
+.driverChartRow small {
+  color: var(--muted);
+}
+.chartKey {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 4px;
+  background: var(--accent);
+}
+.deliveredKey {
+  background: #b7a2ed;
+}
+.themeGallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin: 28px 0;
+}
+.themePreview {
+  background: var(--preview-bg);
+  color: var(--preview-accent);
+  padding: 22px;
+  border-radius: 22px;
+  border: 2px solid transparent;
+  text-align: left;
+  display: grid;
+  gap: 12px;
+}
+.themePreview[aria-pressed="true"] {
+  border-color: var(--accent);
+  outline: 2px solid var(--border);
+  outline-offset: 4px;
+}
+.themePreview small {
+  color: #eee;
+  font-weight: 400;
+}
+.miniWorkspace {
+  height: 110px;
+  display: grid;
+  grid-template-columns: 20% 1fr 1fr;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #ffffff30;
+  border-radius: 12px;
+}
+.miniWorkspace i {
+  grid-row: span 2;
+  background: #ffffff10;
+  border-radius: 5px;
+}
+.miniWorkspace span {
+  background: var(--preview-accent);
+  opacity: 0.5;
+  border-radius: 8px;
+}
+.miniWorkspace span:first-of-type {
+  grid-column: span 2;
+  opacity: 0.8;
+}
+.appearanceSettings {
+  max-width: 1100px;
+}
+.appearanceSettings h2 {
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -1px;
+}
+.appearanceSettings form {
+  max-width: 600px;
+  background: var(--surface);
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+.colourChoices {
+  display: flex;
+  gap: 24px;
+}
+.colourChoices input {
+  width: 100px;
+  height: 45px;
+  padding: 4px;
+}
+@keyframes growBar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes revealPanel {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.mawadaHero,
+.chartCard {
+  animation: revealPanel 0.55s ease both;
+}
+:root[data-motion="off"] *,
+:root[data-motion="off"] *:before {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *:before {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+@media (max-width: 800px) {
+  #dashboardCharts,
+  .themeGallery {
+    grid-template-columns: 1fr;
+  }
+  .chartRow {
+    grid-template-columns: 105px minmax(0, 1fr) 22px;
+  }
+  .chartCard {
+    padding: 18px;
+  }
+}
+
+@media (min-width: 1100px) {
+  #fleetAlerts {
+    grid-row: 5 / 7;
+  }
+}

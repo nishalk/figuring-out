@@ -161,6 +161,7 @@ function render() {
         ]
       : []),
     ...(admin ? [{ id: "users", label: "Team access", symbol: "users" }] : []),
+    { id: "settings", label: "Settings", symbol: "vendor" },
   ];
   if (!pages.some((p) => p.id === view)) view = "orders";
   $("#logout").hidden = false;
@@ -170,6 +171,7 @@ function render() {
     vendors: "Your pickup network.",
     users: "The people who keep it moving.",
     reports: "The full story of every order.",
+    settings: "Make Mawada yours.",
   };
   app.innerHTML = `<div class="appShell"><aside class="workspaceSidebar"><div class="workspaceLabel">WORKSPACE <span class="liveDot"></span></div><div class="workspaceName">Mawada delivery<small>One warehouse · Online delivery</small></div><nav aria-label="Workspace navigation">${pages.map((p) => `<button data-view="${p.id}" class="${view === p.id ? "active" : ""}" ${view === p.id ? 'aria-current="page"' : ""}>${icon(p.symbol)}<span>${p.label}</span>${p.id === "orders" ? `<span class="navCount">${state.orders.length}</span>` : ""}</button>`).join("")}</nav><div class="sidebarNote">${icon("check")}<div>Complete orders only<small>Every item checked before dispatch.</small></div></div><div class="userCard"><span class="avatar">${esc(state.user.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.role)}</small></div></div></aside><div class="workspaceMain"><div class="pageHeading"><div><div class="eyebrow">OPERATIONS / ${esc(pages.find((p) => p.id === view).label.toUpperCase())}</div><h1>${titles[view]}</h1><p class="muted">${view === "orders" ? "Track pickups, consolidate with confidence, and keep deliveries moving." : "Everything your team needs, without the extra steps."}</p></div>${ops && view === "orders" ? `<button class="primary" id="quickCreate">${icon("plus")} Create order</button>` : ""}</div>${admin ? `<div class="storageNote"><span class="liveDot"></span>${state.storageBackend === "supabase" ? "Cloud database: Supabase" : state.storageBackend === "demo" ? "Sample demo · browser only" : "Local trial database"}</div>` : ""}${view === "orders" ? `<div class="stats">${statuses.map((s, i) => `<button class="stat ${statusClass(s)} ${statusFilter === s ? "selected" : ""}" data-status="${s}" aria-pressed="${statusFilter === s}"><div class="statTop"><span>${s}</span>${icon(["box", "truck", "warehouse", "truck", "alert", "check"][i])}</div><div class="statBottom"><strong>${state.orders.filter((o) => o.status === s).length}</strong><span>View orders</span></div></button>`).join("")}</div>` : ""}${ops && view === "orders" ? '<div id="fleetPanel"></div>' : ""}<div id="content"></div><footer class="workspaceFooter"><span>Mawada · Kuwait delivery</span><span>Pickup → Warehouse → Delivery</span></footer></div></div>`;
   document.querySelectorAll("[data-view]").forEach(
@@ -199,6 +201,7 @@ function render() {
   if (view === "vendors") vendors(c);
   if (view === "users") users(c);
   if (view === "reports") renderReports(c);
+  if (view === "settings") renderAppearance(c);
   if (ops && view === "orders") renderFleet($("#fleetPanel"));
 }
 async function refresh(message = "Workspace updated") {
@@ -658,3 +661,50 @@ $("#logout").onclick = () =>
   });
 startOperationalPolling();
 boot();
+
+function renderAppearance(root) {
+  const theme = window.MawadaTheme,
+    current = theme.get();
+  root.innerHTML = `<section class="appearanceSettings"><div class="eyebrow">YOUR WORKSPACE, YOUR STYLE</div><h2>Choose your atmosphere.</h2><p class="muted">Preview instantly. Saved for this browser on this device.</p><div class="themeGallery">${Object.entries(
+    theme.palettes,
+  )
+    .map(
+      ([key, p]) =>
+        `<button class="themePreview" data-palette-choice="${key}" aria-pressed="${current.palette === key}" style="--preview-bg:${p.background};--preview-accent:${p.accent}"><div class="miniWorkspace"><i></i><span></span><span></span><span></span></div><strong>${p.name}</strong><small>${key === "midnight" ? "Black · burgundy · white" : key === "orchid" ? "Deep violet · luminous orchid" : "Classic Mawada plum"}</small></button>`,
+    )
+    .join(
+      "",
+    )}</div><form id="appearanceForm"><label>Appearance<select name="mode"><option value="system">Follow device</option><option value="light">Light</option><option value="dark">Dark</option></select></label><div class="colourChoices"><label>Accent colour<input type="color" name="accent" value="${current.custom.accent || theme.palettes[current.palette].accent}"></label><label>Background colour<input type="color" name="background" value="${current.custom.background || theme.palettes[current.palette].background}"></label></div><p class="muted">Use lighter lettering on dark backgrounds for readability. Custom colours override the selected palette.</p><label><input type="checkbox" name="motion" ${current.custom.motion !== false ? "checked" : ""}> Enable subtle animation (device reduced-motion preference is always respected)</label><div class="row"><button>Save custom colours</button><button type="button" class="ghost" id="resetColours">Reset custom colours</button></div><p id="appearanceSaved" role="status"></p></form></section>`;
+  root.querySelector("[name=mode]").value = current.preference;
+  root.querySelectorAll("[data-palette-choice]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        theme.set({
+          palette: b.dataset.paletteChoice,
+          custom: { motion: current.custom.motion },
+          preference: "dark",
+        });
+        renderAppearance(root);
+      }),
+  );
+  root.querySelector("#resetColours").onclick = () => {
+    theme.set({ custom: {} });
+    renderAppearance(root);
+  };
+  root.querySelector("#appearanceForm").onsubmit = (e) => {
+    e.preventDefault();
+    const data = new FormData(e.target);
+    theme.set({
+      preference: data.get("mode"),
+      custom: {
+        accent: data.get("accent"),
+        background: data.get("background"),
+        motion: data.has("motion"),
+      },
+    });
+    root.querySelector("#appearanceSaved").textContent =
+      "Appearance saved on this device.";
+  };
+  root.querySelector("[name=mode]").onchange = (e) =>
+    theme.set({ preference: e.target.value });
+}

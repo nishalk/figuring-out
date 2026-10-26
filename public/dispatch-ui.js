@@ -44,7 +44,7 @@ function renderFleet(root) {
     }
     fleetRoot = root;
     fleetMarkers = [];
-    root.innerHTML = `<section class="fleetSection"><div id="mawadaOverview"></div><div class="boardHeading"><div><h2>Fleet control</h2><p class="muted">Pickup and delivery legs · refreshes every 15 seconds</p></div><button class="ghost" id="refreshFleet">Refresh fleet</button></div><div class="fleetMapHeading"><span id="fleetRefreshTime"></span><button class="ghost" id="fitDrivers">Fit driver locations</button></div><div id="driverMap" role="region" aria-label="Driver location map"></div><p class="mapNotice" id="mapNotice">Markers show last reported GPS, not guaranteed current positions. Sharing requires the driver screen to remain open.</p><div id="fleetAlerts" aria-live="polite"></div><div id="fleetTable" class="tableScroll"></div><div id="driverProfile"></div><p class="muted fleetDefinitions">Assigned = open orders with a delivery or pending pickup for that driver. Pending delivery = not dispatched. Active trips = pickup or delivery legs currently in transit.</p></section>`;
+    root.innerHTML = `<section class="fleetSection"><div id="mawadaOverview"></div><div id="dashboardCharts"></div><div class="boardHeading"><div><h2>Fleet control</h2><p class="muted">Pickup and delivery legs · refreshes every 15 seconds</p></div><button class="ghost" id="refreshFleet">Refresh fleet</button></div><div class="fleetMapHeading"><span id="fleetRefreshTime"></span><button class="ghost" id="fitDrivers">Fit driver locations</button></div><div id="driverMap" role="region" aria-label="Driver location map"></div><p class="mapNotice" id="mapNotice">Markers show last reported GPS, not guaranteed current positions. Sharing requires the driver screen to remain open.</p><div id="fleetAlerts" aria-live="polite"></div><div id="fleetTable" class="tableScroll"></div><div id="driverProfile"></div><p class="muted fleetDefinitions">Assigned = open orders with a delivery or pending pickup for that driver. Pending delivery = not dispatched. Active trips = pickup or delivery legs currently in transit.</p></section>`;
     $("#refreshFleet").onclick = () =>
       run(async () => {
         state = await api("state");
@@ -166,6 +166,7 @@ function renderFleet(root) {
           .scrollIntoView({ behavior: "smooth", block: "start" });
       }),
   );
+  renderDashboardCharts(root.querySelector("#dashboardCharts"), rows);
   const oldCount = fleetMarkers.length;
   if (fleetMap) fleetMarkers.forEach((m) => m.remove());
   fleetMarkers = [];
@@ -760,4 +761,39 @@ function startOperationalPolling() {
       polling = false;
     }
   }, 15000);
+}
+
+function renderDashboardCharts(root, drivers) {
+  const total = state.orders.length;
+  const groups = statuses.map((status, i) => ({
+    status,
+    count: state.orders.filter((o) => o.status === status).length,
+    index: i,
+  }));
+  const max = Math.max(
+    1,
+    ...drivers.map((d) => d.assignedOrders + d.delivered),
+  );
+  root.innerHTML = `<section class="chartCard"><div class="eyebrow">SHIPMENT MIX</div><h3>Every stage, in focus.</h3><p class="muted">All recorded orders · click a bar to filter</p><div class="statusChart">${groups.map((g) => `<button class="chartRow" data-chart-status="${esc(g.status)}" aria-label="${esc(g.status)}: ${g.count} orders"><span>${esc(g.status)}</span><div class="chartTrack"><i class="chartFill chartColour${g.index}" style="width:${total ? (g.count / total) * 100 : 0}%"></i></div><strong>${g.count}</strong></button>`).join("")}</div>${!total ? "<p>No shipments yet. Your chart will grow as orders arrive.</p>" : ""}</section><section class="chartCard"><div class="eyebrow">DRIVER BALANCE</div><h3>The team behind each arrival.</h3><p class="muted"><span class="chartKey pendingKey"></span> Open assigned shipments <span class="chartKey deliveredKey"></span> Delivered · all history</p>${drivers.map((d) => `<button class="driverChartRow" data-chart-driver="${esc(d.id)}"><span>${esc(d.name)}</span><div class="chartTrack stacked"><i style="width:${(d.assignedOrders / max) * 100}%"></i><i style="width:${(d.delivered / max) * 100}%"></i></div><small>${d.assignedOrders} open · ${d.delivered} delivered</small></button>`).join("") || "<p>Create driver accounts to see workloads here.</p>"}<p class="muted">Workload snapshot, not a driver ranking. Click a driver for shipment details.</p></section>`;
+  root.querySelectorAll("[data-chart-status]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        statusFilter = b.dataset.chartStatus;
+        searchQuery = "";
+        orders(document.querySelector("#content"));
+        document
+          .querySelector("#content")
+          .scrollIntoView({ behavior: "smooth" });
+      }),
+  );
+  root.querySelectorAll("[data-chart-driver]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        selectedDriverId = b.dataset.chartDriver;
+        renderDriverProfile(root.closest(".fleetSection"), drivers);
+        document
+          .querySelector("#driverProfile")
+          .scrollIntoView({ behavior: "smooth" });
+      }),
+  );
 }
