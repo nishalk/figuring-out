@@ -44,3 +44,5 @@ See [the private trial deployment guide](docs/deployment.md) for `areyoutrip.in`
 ## Supabase
 
 Optional remote storage is available using `DATABASE_BACKEND=supabase`. Follow [the Supabase setup guide](docs/supabase.md) before enabling it. Hostinger-injected Supabase variables alone leave the SQLite backend unchanged. Existing SQLite data is not automatically copied. The SQL schema and server-only key must be configured in the connected project before switching; local tests do not verify the live project.
+
+ExcelJS currently declares uuid 8.x. A scoped npm override pins its dependency to CommonJS-compatible uuid 11.1.1 to address GHSA-w5hq-g745-h8pq / CVE-2026-41907. The Excel formatting round-trip test exercises ExcelJS's UUID generation; the workflow test also checks Excel import. Keep the override until an upstream ExcelJS release incorporates a patched version.

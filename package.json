@@ -31,5 +31,10 @@
   },
   "devDependencies": {
     "prettier": "^3.9.10"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   }
 }
