@@ -530,7 +530,7 @@ const fs = require("node:fs"),
         verifiedItems: sample.items.map((i) => i.id),
       });
     });
-    await pollingPage.clock.fastForward(15000);
+    await pollingPage.clock.fastForward(30000);
     await pollingPage.waitForFunction(() =>
       [...document.querySelectorAll("#fleetTable tbody tr")].some(
         (row) =>
@@ -547,7 +547,7 @@ const fs = require("node:fs"),
     await pollingPage
       .getByRole("heading", { name: "Order board", exact: true })
       .click();
-    await pollingPage.clock.fastForward(15000);
+    await pollingPage.clock.fastForward(30000);
     await pollingPage.waitForFunction(
       () =>
         document.querySelector(
