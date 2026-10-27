@@ -276,6 +276,18 @@ test(
       assert.ok(!JSON.stringify(report).includes("data:image/"));
       await req(admin, "reports?from=2026-02-31", null, 400);
       await req(admin, "reports?from=2026-12-01&to=2026-01-01", null, 400);
+      await req(winner, "import/template", null, 403);
+      const templateResponse = await raw(admin, "import/template");
+      assert.equal(templateResponse.status, 200);
+      const templateBook = new ExcelJS.Workbook();
+      await templateBook.xlsx.load(
+        Buffer.from(await templateResponse.arrayBuffer()),
+      );
+      assert.equal(templateBook.worksheets[0].name, "Orders");
+      assert.equal(
+        templateBook.worksheets[0].getCell("B1").value,
+        "Recipient Delivery Date",
+      );
       const exportResponse = await raw(admin, "reports/export");
       assert.equal(
         exportResponse.status,

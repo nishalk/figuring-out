@@ -331,6 +331,23 @@ async function main() {
     const result = await require("./demo-orders")(store, prepareOrder, q.user);
     r.json(result);
   });
+  app.get(
+    "/api/import/template",
+    permit("admin", "operations"),
+    async (q, r) => {
+      if (!access.allowed(q.user, "create"))
+        return r.status(403).json({ error: "Order import access required" });
+      const book = await require("./order-template").workbook();
+      r.set(
+        "Content-Disposition",
+        'attachment; filename="Mawada-CMS-Order-Template.xlsx"',
+      )
+        .type(
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        .send(Buffer.from(await book.xlsx.writeBuffer()));
+    },
+  );
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
