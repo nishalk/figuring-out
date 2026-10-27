@@ -13,6 +13,7 @@ const validPoint = (p) =>
   Math.abs(p.lat) <= 90 &&
   Math.abs(p.lng) <= 180;
 const safeProofImage = (value) =>
+  ["/brand/demo-gift.png", "/brand/demo-signature.png"].includes(value) ||
   /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value || "");
 function openOrderDetails(id) {
   const o = state.orders.find((o) => o.id === id);
@@ -24,7 +25,7 @@ function openOrderDetails(id) {
   proofPinMap?.remove();
   proofPinMap = null;
   document.querySelector("#orderDetailContent").innerHTML =
-    `<div class="eyebrow">${o.demoData ? "FICTIONAL DEMO · " : ""}ORDER DETAILS</div><h2>${esc(o.awb)}</h2><p>${esc(o.reference)} · ${esc(o.status)}</p><h3>${esc(o.recipient)}</h3><p>${esc(o.phone)}<br>${esc(o.address)}</p><p>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</p>${orderDeliveryNotes(o).replace(/<form[\s\S]*?<\/form>/g, "")}<h3>Items & pickup locations</h3>${o.items.map((i) => `<p>${esc(i.name)} × ${i.quantity} · ${esc(i.vendor.name)} · ${i.received ? "At warehouse" : "Awaiting receipt"}</p>`).join("")}<button id="detailPrintAwb">Print this AWB</button><h3>Pickup and delivery proof</h3>${proofs.map((p, i) => `<article class="proofCard"><h4>${esc(p.stage)} ${p.simulated ? "· Simulated" : ""}</h4><p>Received / acknowledged by: <strong>${esc(p.name || "Not recorded")}</strong><br>${displayTime(p.at)}<br>${esc(p.vendor || "")}</p>${safeProofImage(p.photo) ? `<img class="proofEvidence" src="${p.photo}" alt="${esc(p.stage)} proof photo">` : "<p>Photo not recorded.</p>"}${safeProofImage(p.signature) ? `<img class="proofEvidence signatureEvidence" src="${p.signature}" alt="Recipient signature">` : "<p>Signature not recorded.</p>"}${validPoint(p) ? `<p>GPS: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)} <button class="ghost" data-proof-pin="${i}">Show location pin</button><a href="https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=17/${p.lat}/${p.lng}" target="_blank" rel="noopener">Open map</a></p>` : "<p>GPS not recorded.</p>"}</article>`).join("") || "<p>No handover proof recorded.</p>"}<div id="proofLocationMap" hidden></div><h3>Order history</h3>${o.history.map((h) => `<p>${esc(h.event)} · ${esc(h.by || "System")} · ${displayTime(h.at)}</p>`).join("")}`;
+    `<div class="eyebrow">${o.demoData ? "FICTIONAL DEMO · " : ""}ORDER DETAILS</div><h2>${esc(o.awb)}</h2><p>${esc(o.reference)} · ${esc(o.status)}</p><h3>${esc(o.recipient)}</h3><p>${esc(o.phone)}<br>${esc(o.address)}</p><p>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</p>${orderDeliveryNotes(o).replace(/<form[\s\S]*?<\/form>/g, "")}<h3>Items & pickup locations</h3>${o.items.map((i) => `<p>${esc(i.name)} × ${i.quantity} · ${esc(i.vendor.name)} · ${i.received ? "At warehouse" : "Awaiting receipt"}</p>${safeProofImage(i.photo) ? `<img class="demoItemPhoto" src="${i.photo}" alt="Fictional demo item"><p class="sampleMediaNote">Fictional sample item image</p>` : ""}`).join("")}<button id="detailPrintAwb">Print this AWB</button><h3>Pickup and delivery proof</h3>${proofs.map((p, i) => `<article class="proofCard"><h4>${esc(p.stage)} ${p.simulated ? "· Simulated" : ""}</h4><p>Received / acknowledged by: <strong>${esc(p.name || "Not recorded")}</strong><br>${displayTime(p.at)}<br>${esc(p.vendor || "")}</p>${safeProofImage(p.photo) ? `<img class="proofEvidence" src="${p.photo}" alt="${esc(p.stage)} proof photo">` : "<p>Photo not recorded.</p>"}${safeProofImage(p.signature) ? `<img class="proofEvidence signatureEvidence" src="${p.signature}" alt="Recipient signature">` : "<p>Signature not recorded.</p>"}${validPoint(p) ? `<p>GPS: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)} <button class="ghost" data-proof-pin="${i}">Show location pin</button><a href="https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=17/${p.lat}/${p.lng}" target="_blank" rel="noopener">Open map</a></p>` : "<p>GPS not recorded.</p>"}</article>`).join("") || "<p>No handover proof recorded.</p>"}<div id="proofLocationMap" hidden></div><h3>Order history</h3>${o.history.map((h) => `<p>${esc(h.event)} · ${esc(h.by || "System")} · ${displayTime(h.at)}</p>`).join("")}`;
   const dialog = document.querySelector("#orderDetailDialog");
   if (!dialog.open) dialog.showModal();
   document.querySelector("#detailPrintAwb").onclick = () => {
@@ -215,11 +216,12 @@ async function showPrintLabels(orders) {
   }
 }
 let labelSelection = new Set();
-function renderLabelWorkspace(root) {
+function renderLabelWorkspace(root, options = {}) {
+  const assigning = options.assigning;
   labelReader?.reset();
   labelReader = null;
   labelSelection = new Set();
-  root.innerHTML = `<section class="chartCard"><h2>Scan, select & print AWBs</h2><p>Enter AWBs separated by spaces, commas or new lines, or scan with a USB/Bluetooth barcode scanner into the input. Print up to 100 labels per batch. Only orders available to your account can be selected.</p><form id="addPrintAwbs"><label>AWB numbers<textarea name="awbs" required placeholder="KW-…"></textarea></label><button>Add AWBs to print list</button></form><button class="ghost" id="labelCamera">Scan with camera</button><button class="ghost" id="stopLabelCamera">Stop camera</button><video id="labelVideo" playsinline muted hidden></video><label>Scan barcode image<input type="file" id="labelScanImage" accept="image/*"></label><p id="labelScanStatus" role="status"></p><button class="ghost" id="selectVisibleLabels">Select current order filter (max 100)</button><div id="labelQueue"></div><button id="printBatch" disabled>Preview / print selected labels</button></section>`;
+  root.innerHTML = `<section class="chartCard"><h2>${assigning ? "Scan & assign orders" : "Scan, select & print AWBs"}</h2><p>Enter AWBs separated by spaces, commas or new lines, or scan with a USB/Bluetooth barcode scanner into the input. ${assigning ? "Assign up to 100 orders" : "Print up to 100 labels"} per batch. Only orders available to your account can be selected.</p><form id="addPrintAwbs"><label>AWB numbers<textarea name="awbs" required placeholder="KW-…"></textarea></label><button>Add AWBs to print list</button></form><button class="ghost" id="labelCamera">Scan with camera</button><button class="ghost" id="stopLabelCamera">Stop camera</button><video id="labelVideo" playsinline muted hidden></video><label>Scan barcode image<input type="file" id="labelScanImage" accept="image/*"></label><p id="labelScanStatus" role="status"></p><button class="ghost" id="selectVisibleLabels">Select current order filter (max 100)</button><div id="labelQueue"></div><button id="printBatch" disabled>Preview / print selected labels</button></section>`;
   const add = (value) => {
     const tokens = String(value)
         .trim()
@@ -239,7 +241,9 @@ function renderLabelWorkspace(root) {
   };
   const draw = () => {
     root.querySelector("#labelQueue").innerHTML =
-      `<h3>${labelSelection.size} labels selected</h3>${[...labelSelection]
+      `<h3>${labelSelection.size} ${assigning ? "orders" : "labels"} selected</h3>${[
+        ...labelSelection,
+      ]
         .map((id) => {
           const o = state.orders.find((o) => o.id === id);
           return `<p><button class="awbLink" data-open-awb="${esc(id)}">${esc(o.awb)}</button> · ${esc(o.recipient)} <button class="ghost" data-remove-label="${esc(id)}">Remove</button></p>`;
@@ -339,5 +343,172 @@ function renderLabelWorkspace(root) {
         e.target.value = "";
       }
     });
+  root.redrawLabelQueue = draw;
   draw();
+}
+
+function openMetricRecords(title, date, rows) {
+  let dialog = document.querySelector("#metricDialog");
+  if (!dialog) {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<dialog id="metricDialog"><button class="ghost" id="closeMetric">Close summary</button><div id="metricRecords"></div></dialog>',
+    );
+    dialog = document.querySelector("#metricDialog");
+    document.querySelector("#closeMetric").onclick = () => dialog.close();
+  }
+  document.querySelector("#metricRecords").innerHTML =
+    `<h2>${esc(title)} · ${esc(date)}</h2><p>${rows.length} ${/pickup/i.test(title) || rows.some((r) => r.pickupId) ? "pickup tasks (one order can have multiple pickups)" : rows.some((r) => r.tripId) ? "trip legs" : "orders"}</p>${rows.map((row) => `<article class="proofCard"><button class="awbLink" data-metric-order="${esc(row.orderId || "")}">${esc(row.awb)}</button><p>${esc(row.recipient || row.vendor || "")} · ${esc(row.status || "")}</p>${row.minutes != null ? `<p>${row.minutes} minutes past deadline · ${row.pending ? "Unfinished" : "Completed late"}</p>` : ""}</article>`).join("") || "<p>No records match this count.</p>"}`;
+  document.querySelectorAll("[data-metric-order]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        dialog.close();
+        openOrderDetails(b.dataset.metricOrder);
+      }),
+  );
+  if (!dialog.open) dialog.showModal();
+}
+function renderAssignmentWorkspace(root) {
+  if (
+    !MawadaAccess.allowed(state.user, "work") ||
+    !["admin", "operations"].includes(state.user.role)
+  ) {
+    root.textContent = "Assignment access required.";
+    return;
+  }
+  renderLabelWorkspace(root, { assigning: true });
+  root
+    .querySelector("h2")
+    .insertAdjacentHTML(
+      "afterend",
+      "<p>Scan or enter one or more AWBs, choose a driver and choose pickup or delivery assignment. Existing active-trip and complete-order rules are enforced. Drivers can also claim available work from their own Scan / claim AWB screen.</p>",
+    );
+  root.querySelector("#printBatch").textContent = "Assign selected orders";
+  root.querySelector("#printBatch").insertAdjacentHTML(
+    "beforebegin",
+    `<div class="grid"><label>Assign to driver<select id="assignmentDriver"><option value="">Choose driver</option>${state.users
+      .filter((u) => u.role === "driver")
+      .map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`)
+      .join(
+        "",
+      )}</select></label><label>Assignment leg<select id="assignmentLeg"><option value="pickup">All incomplete vendor pickups</option><option value="delivery">Delivery driver</option></select></label></div><div id="assignmentResults" role="status"></div>`,
+  );
+  root.querySelector("#printBatch").onclick = () =>
+    run(async () => {
+      const driver = root.querySelector("#assignmentDriver").value,
+        leg = root.querySelector("#assignmentLeg").value;
+      if (!driver) throw Error("Choose a driver");
+      labelReader?.reset();
+      labelReader = null;
+      const results = [];
+      for (const id of [...labelSelection]) {
+        const order = state.orders.find((o) => o.id === id);
+        if (!order) continue;
+        try {
+          if (leg === "pickup") {
+            const tasks = order.pickups.filter((p) => !p.completed);
+            if (!tasks.length) throw Error("No incomplete pickups");
+            for (const p of tasks)
+              await api("orders/" + encodeURIComponent(id) + "/action", {
+                action: "assign-pickup",
+                pickup: p.id,
+                driver,
+              });
+            results.push(order.awb + ": " + tasks.length + " pickups assigned");
+          } else {
+            await api("orders/" + encodeURIComponent(id) + "/action", {
+              action: "assign",
+              driver,
+            });
+            results.push(order.awb + ": delivery assigned");
+          }
+          labelSelection.delete(id);
+        } catch (error) {
+          results.push(
+            order.awb +
+              ": " +
+              error.message +
+              " (check for partial pickup assignment before retrying)",
+          );
+        }
+      }
+      state = await api("state");
+      root.redrawLabelQueue?.();
+      root.querySelector("#assignmentResults").textContent =
+        results.join(" · ");
+      root.querySelector("#printBatch").disabled = labelSelection.size === 0;
+    });
+}
+
+function bindDriverCounterDrilldowns(root, driver) {
+  const id = driver.id;
+  const orderRow = (o) => ({
+    orderId: o.id,
+    awb: o.awb,
+    recipient: o.recipient,
+    status: o.status,
+  });
+  const deliveries = state.orders.filter((o) => o.driver === id);
+  const sets = [
+    (driver.shipments || []).map(orderRow),
+    state.orders
+      .filter(
+        (o) =>
+          (o.driver === id && o.status !== "Delivered") ||
+          o.pickups.some((p) => p.driver === id && !p.completed),
+      )
+      .map(orderRow),
+    state.orders
+      .filter(
+        (o) =>
+          (o.proofs || []).some(
+            (p) => p.stage === "Delivered" && p.driverId === id,
+          ) ||
+          (o.driver === id && o.status === "Delivered"),
+      )
+      .map(orderRow),
+    deliveries
+      .filter((o) =>
+        ["Created", "Picked up", "At warehouse"].includes(o.status),
+      )
+      .map(orderRow),
+    deliveries.filter((o) => o.status === "Out for delivery").map(orderRow),
+    deliveries.filter((o) => o.status === "Delivery failed").map(orderRow),
+    (driver.pickups || [])
+      .filter((p) => p.completed)
+      .map((p) => ({
+        orderId: p.orderId,
+        awb: p.awb,
+        pickupId: p.id,
+        vendor: p.vendor.name,
+        status: "Collected",
+      })),
+    (driver.pickups || [])
+      .filter((p) => !p.completed)
+      .map((p) => ({
+        orderId: p.orderId,
+        awb: p.awb,
+        pickupId: p.id,
+        vendor: p.vendor.name,
+        status: "Pending",
+      })),
+    (driver.activeTrips || []).map((t) => ({
+      orderId: state.orders.find((o) => o.awb === t.awb)?.id,
+      awb: t.awb,
+      tripId: t.id,
+      status: t.kind + " · " + t.status,
+    })),
+  ];
+  root.querySelectorAll(".driverCounters > span").forEach((span, i) => {
+    const button = document.createElement("button");
+    button.className = "driverCounterButton";
+    button.innerHTML = span.innerHTML;
+    button.onclick = () =>
+      openMetricRecords(
+        driver.name + " · " + span.textContent.trim(),
+        "All recorded work",
+        sets[i],
+      );
+    span.replaceWith(button);
+  });
 }

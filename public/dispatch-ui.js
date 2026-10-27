@@ -198,7 +198,7 @@ function renderFleet(root) {
               );
             fleetMarkers.push(marker);
           }
-          return `<tr><td><button class="ghost driverProfileButton" data-driver-profile="${esc(d.id)}">${esc(d.name)} · View driver</button><small>${d.shipmentsHandled} shipments handled · ${(d.alerts || []).filter((a) => !a.review).length} open flags</small><small>${d.failedDeliveries} failed deliveries · ${d.completedPickups} pickups completed</small></td><td>${d.assignedOrders}</td><td>${d.pendingDeliveries}</td><td><details><summary>${d.activeTrips.length} in transit</summary>${d.activeTrips.map((t) => `<p>${esc(t.awb)} · ${esc(t.kind)}<small>${esc(t.milestone || "In transit")}</small></p>`).join("") || "<small>No active trips</small>"}</details></td><td><details><summary>${d.pendingPickups} pending</summary>${
+          return `<tr><td><button class="ghost driverProfileButton" data-driver-profile="${esc(d.id)}">${esc(d.name)} · View driver</button><small>${d.shipmentsHandled} shipments handled · ${(d.alerts || []).filter((a) => !a.review).length} open flags</small><small>${d.failedDeliveries} failed deliveries · ${d.completedPickups} pickups completed</small></td><td><button class="awbLink" data-driver-metric="assigned" data-driver-id="${esc(d.id)}">${d.assignedOrders}</button></td><td><button class="awbLink" data-driver-metric="pending" data-driver-id="${esc(d.id)}">${d.pendingDeliveries}</button></td><td><details><summary>${d.activeTrips.length} in transit</summary>${d.activeTrips.map((t) => `<p><button class="awbLink" data-open-awb="${esc(state.orders.find((o) => o.awb === t.awb)?.id || "")}">${esc(t.awb)}</button> · ${esc(t.kind)}<small>${esc(t.milestone || "In transit")}</small></p>`).join("") || "<small>No active trips</small>"}</details></td><td><details><summary>${d.pendingPickups} pending</summary>${
             d.pickups
               .filter((p) => !p.completed)
               .map(
@@ -206,7 +206,7 @@ function renderFleet(root) {
                   `<p><strong>${esc(p.vendor.name)}</strong><small>${esc(p.awb)} · ${esc(p.vendor.address)}</small></p>`,
               )
               .join("") || "<small>No pending pickups</small>"
-          }</details></td><td>${d.delivered}</td><td>${valid ? `<span class="locationState ${fresh ? "fresh" : "stale"}">${fresh ? "Recent GPS" : d.locationSharing ? "Stale GPS" : "Sharing paused"}</span><small>${esc(locationAge(pos.at))} · ±${Math.round(pos.accuracy || 0)} m</small><small>${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</small><button class="ghost" data-locate="${esc(d.id)}" aria-label="Locate ${esc(d.name)}">Locate</button>` : '<span class="muted">Not shared yet</span>'}</td></tr>`;
+          }</details></td><td><button class="awbLink" data-driver-metric="delivered" data-driver-id="${esc(d.id)}">${d.delivered}</button></td><td>${valid ? `<span class="locationState ${fresh ? "fresh" : "stale"}">${fresh ? "Recent GPS" : d.locationSharing ? "Stale GPS" : "Sharing paused"}</span><small>${esc(locationAge(pos.at))} · ±${Math.round(pos.accuracy || 0)} m</small><small>${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</small><button class="ghost" data-locate="${esc(d.id)}" aria-label="Locate ${esc(d.name)}">Locate</button>` : '<span class="muted">Not shared yet</span>'}</td></tr>`;
         })
         .join("")}</tbody></table>`
     : '<p class="muted">Create driver accounts in Team access. Their workloads and shared locations will appear here.</p>';
@@ -214,6 +214,37 @@ function renderFleet(root) {
     (b) =>
       (b.onclick = () => {
         selectedDriverId = b.dataset.driverProfile;
+        root.querySelectorAll("[data-driver-metric]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              const id = b.dataset.driverId,
+                key = b.dataset.driverMetric;
+              const orders = state.orders.filter((o) =>
+                key === "delivered"
+                  ? (o.proofs || []).some(
+                      (p) => p.stage === "Delivered" && p.driverId === id,
+                    ) ||
+                    (o.driver === id && o.status === "Delivered")
+                  : key === "pending"
+                    ? o.driver === id &&
+                      ["Created", "Picked up", "At warehouse"].includes(
+                        o.status,
+                      )
+                    : (o.driver === id && o.status !== "Delivered") ||
+                      o.pickups.some((p) => p.driver === id && !p.completed),
+              );
+              openMetricRecords(
+                rows.find((d) => d.id === id).name + " · " + key,
+                "All recorded orders",
+                orders.map((o) => ({
+                  orderId: o.id,
+                  awb: o.awb,
+                  recipient: o.recipient,
+                  status: o.status,
+                })),
+              );
+            }),
+        );
         renderDriverProfile(root, rows);
         root
           .querySelector("#driverProfile")
@@ -260,6 +291,7 @@ function renderDriverProfile(root, rows) {
   driverTrailMap = null;
   target.dataset.driver = d.id;
   target.innerHTML = `<section class="driverProfile"><div class="boardHeading"><div><div class="eyebrow">DRIVER DETAILS</div><h2>${esc(d.name)}</h2><p class="muted">All recorded history · unique shipments handled includes pickup, delivery and previous trip assignments. Current workload and completed legs are separate counts.</p></div><button class="ghost" id="closeDriverProfile">Close</button></div><div class="driverCounters"><span><strong>${d.shipmentsHandled}</strong> Shipments handled</span><span><strong>${d.assignedOrders}</strong> Open assigned shipments</span><span><strong>${d.delivered}</strong> Delivered</span><span><strong>${d.pendingDeliveries}</strong> Awaiting dispatch</span><span><strong>${d.inTransitDeliveries}</strong> Out for delivery</span><span><strong>${d.failedDeliveries}</strong> Failed delivery</span><span><strong>${d.completedPickups}</strong> Pickups completed</span><span><strong>${d.pendingPickups}</strong> Pickups pending</span><span><strong>${d.activeTrips.length}</strong> Active trip legs</span></div><section id="driverActivity" aria-live="polite">Loading driver activity…</section><h3>Location & activity review</h3><p>${d.lastLocation ? `Last GPS ${displayTime(d.lastLocation.at)} · ±${Math.round(d.lastLocation.accuracy)} m` : "No GPS reported"} · ${d.locationSharing ? "Sharing enabled" : "Sharing paused"}</p><p class="muted">Proof checks compare GPS sources, not the destination address. Destination geofencing needs verified map pins. GPS can be inaccurate; confirm with the driver before acting.</p>${(d.alerts || []).map((a) => `<article class="driverFlag ${a.review ? "reviewed" : ""}"><h4>${esc(a.kind)} ${a.review ? "· Reviewed" : "· Needs review"}</h4><p>${esc(a.detail)}</p><small>${displayTime(a.at)}</small>${a.review ? `<p>Reviewed by ${esc(a.review.by)} · ${displayTime(a.review.at)}<br>${esc(a.review.note)}</p>` : `<form data-review-alert="${esc(a.id)}"><label>Review note<input name="note" required maxlength="500" placeholder="For example: confirmed waiting at vendor"></label><button>Record review</button></form>`}</article>`).join("") || "<p>No review flags recorded.</p>"}${d.reviews?.length ? `<details><summary>Review log · ${d.reviews.length} recorded</summary>${d.reviews.map((r) => `<p><strong>${esc(r.kind || "Location review")}</strong> · ${esc(r.by)} · ${displayTime(r.at)}<br>${esc(r.note)}</p>`).join("")}</details>` : ""}<h3>Shipments, pickups & trip history</h3><div class="tableScroll"><table><thead><tr><th>Shipment</th><th>Current order status</th><th>Driver’s work</th><th>Trips</th></tr></thead><tbody>${(d.shipments || []).map((o) => `<tr><td><button class="ghost" data-driver-order="${esc(o.id)}">${esc(o.awb)}</button><small>${esc(o.reference)} · ${esc(o.recipient)}</small><small>${esc(o.address)}</small></td><td>${esc(o.status)}</td><td>${o.deliveryAssigned ? "Current delivery driver" : ""}${o.pickups.map((p) => `<p>${esc(p.vendor)} · ${p.completed ? "Pickup completed" : "Pickup pending"}<small>${esc(p.address)}</small></p>`).join("") || (o.deliveryAssigned ? "" : "Previous assignment")}</td><td>${o.trips.map((t) => `<p>${esc(t.kind)} · ${esc(t.status)}<small>${displayTime(t.startedAt)} → ${displayTime(t.endedAt)} · ${esc(t.milestone || "")}</small></p>`).join("") || "Not started"}</td></tr>`).join("") || '<tr><td colspan="4">No shipments recorded.</td></tr>'}</tbody></table></div></section>`;
+  bindDriverCounterDrilldowns(target, d);
   loadDriverActivity(target, d.id);
   target.querySelector("#closeDriverProfile").onclick = () => {
     activityGeneration++;
@@ -832,7 +864,18 @@ function renderExecutiveDashboard(root) {
     ["Late deliveries", "lateDeliveries"],
     ["Late pickups", "latePickups"],
   ];
-  root.innerHTML = `<section class="executiveDashboard">${state.orders.some((o) => o.demoData) ? '<p class="demoAccountNotice">Dashboard includes FICTIONAL DEMO orders and simulated milestones.</p>' : ""}<div class="executiveHero"><div><span class="eyebrow">MAWADA · THE DAILY PICTURE</span><h2>Every gift has a journey.<br>See how today is unfolding.</h2><p>${esc(now.date)} · Asia/Kuwait · refreshes every 30 seconds</p></div><div class="mawadaRibbon brandBow" aria-hidden="true"></div></div><div class="dailyMetrics">${metrics.map(([label, key]) => `<article class="chartCard"><span>${label}</span><strong>${now[key]}</strong><small>Yesterday: ${prev[key]} · ${now[key] - prev[key] > 0 ? "+" : ""}${now[key] - prev[key]} count change</small></article>`).join("")}</div><p class="muted">Today is a partial day; yesterday is a full calendar day. Due/remaining use scheduled delivery dates. Completed counts use proof timestamps. Delays include late completions and overdue unfinished work.</p><div class="mawadaWorkload"><span>${fleet.length} drivers</span><span>${fleet.reduce((n, d) => n + d.activeTrips.length, 0)} active trip legs</span><span>${flags} open location review flags</span></div><div id="overviewCharts"></div><section class="chartCard previousDay"><div class="eyebrow">YESTERDAY · ${esc(prev.date)}</div><h3>What needs a follow-up?</h3><p>${prev.delivered} delivered · ${prev.pickupsCompleted} pickups completed · ${prev.remaining} scheduled deliveries still without delivery proof</p><h4>Delivery delays · ${prev.lateDeliveries}</h4>${prev.delayRows.map((o) => `<p><strong>${esc(o.awb)}</strong> · ${o.pending ? "Overdue, not delivered" : "Delivered late"} · ${o.minutes} minutes past deadline</p>`).join("") || "<p>No confirmed delivery delays in records with a usable deadline.</p>"}<p class="muted">${prev.deliveryUnknown} of yesterday’s scheduled deliveries have no usable deadline. A delivery date alone does not establish lateness. Supported slots: 24-hour HH:mm–HH:mm.</p><h4>Pickup delays · ${prev.latePickups}</h4>${prev.pickupDelayRows.map((p) => `<p>${esc(p.awb)} · ${esc(p.vendor)} · ${p.completed ? "Collected late" : "Overdue pickup"}</p>`).join("") || "<p>No confirmed pickup delays in records with a scheduled pickup deadline.</p>"}<p class="muted">${prev.pickupUnknown} pickup tasks across all records have no scheduled deadline, so pickup punctuality cannot be assessed for them. Pickup deadline entry is not yet available in the UI.</p></section><button class="ghost" id="openDashboardOrders">Open order workspace</button></section>`;
+  root.innerHTML = `<section class="executiveDashboard">${state.orders.some((o) => o.demoData) ? '<p class="demoAccountNotice">Dashboard includes FICTIONAL DEMO orders and simulated milestones.</p>' : ""}<div class="executiveHero"><div><span class="eyebrow">MAWADA · THE DAILY PICTURE</span><h2>Every gift has a journey.<br>See how today is unfolding.</h2><p>${esc(now.date)} · Asia/Kuwait · refreshes every 30 seconds</p></div><div class="mawadaRibbon brandBow" aria-hidden="true"></div></div><div class="dailyMetrics">${metrics.map(([label, key]) => `<article class="chartCard"><button class="metricDrilldown" data-daily-detail="${key}" data-day="today"><span>${label}</span><strong>${now[key]}</strong><small>View ${now[key]} records ↗</small></button><button class="ghost" data-daily-detail="${key}" data-day="yesterday">Yesterday: ${prev[key]}</button><small>${now[key] - prev[key] > 0 ? "+" : ""}${now[key] - prev[key]} count change</small></article>`).join("")}</div><p class="muted">Today is a partial day; yesterday is a full calendar day. Due/remaining use scheduled delivery dates. Completed counts use proof timestamps. Delays include late completions and overdue unfinished work.</p><div class="mawadaWorkload"><button class="ghost" data-dashboard-group="drivers">${fleet.length} drivers</button><button class="ghost" data-dashboard-group="trips">${fleet.reduce((n, d) => n + d.activeTrips.length, 0)} active trip legs</button><button class="ghost" data-dashboard-group="flags">${flags} open location review flags</button></div><div id="overviewCharts"></div><section class="chartCard previousDay"><div class="eyebrow">YESTERDAY · ${esc(prev.date)}</div><h3>What needs a follow-up?</h3><p>${prev.delivered} delivered · ${prev.pickupsCompleted} pickups completed · ${prev.remaining} scheduled deliveries still without delivery proof</p><h4>Delivery delays · ${prev.lateDeliveries}</h4>${prev.delayRows.map((o) => `<p><strong>${esc(o.awb)}</strong> · ${o.pending ? "Overdue, not delivered" : "Delivered late"} · ${o.minutes} minutes past deadline</p>`).join("") || "<p>No confirmed delivery delays in records with a usable deadline.</p>"}<p class="muted">${prev.deliveryUnknown} of yesterday’s scheduled deliveries have no usable deadline. A delivery date alone does not establish lateness. Supported slots: 24-hour HH:mm–HH:mm.</p><h4>Pickup delays · ${prev.latePickups}</h4>${prev.pickupDelayRows.map((p) => `<p>${esc(p.awb)} · ${esc(p.vendor)} · ${p.completed ? "Collected late" : "Overdue pickup"}</p>`).join("") || "<p>No confirmed pickup delays in records with a scheduled pickup deadline.</p>"}<p class="muted">${prev.pickupUnknown} pickup tasks across all records have no scheduled deadline, so pickup punctuality cannot be assessed for them. Pickup deadline entry is not yet available in the UI.</p></section><button class="ghost" id="openDashboardOrders">Open order workspace</button></section>`;
+  root
+    .querySelectorAll("[data-daily-detail]")
+    .forEach(
+      (b) =>
+        (b.onclick = () =>
+          openMetricRecords(
+            metrics.find((m) => m[1] === b.dataset.dailyDetail)[0],
+            daily[b.dataset.day].date,
+            daily[b.dataset.day].details[b.dataset.dailyDetail],
+          )),
+    );
   renderDashboardCharts(root.querySelector("#overviewCharts"), fleet);
   // Dashboard remains a summary; chart drilldowns move to the operational workspace.
   root.querySelectorAll("[data-chart-status]").forEach(

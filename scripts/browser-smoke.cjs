@@ -100,6 +100,13 @@ const fs = require("node:fs"),
     );
     await page.locator("[data-view=dashboard]").click();
     assert.equal(await page.locator(".dailyMetrics article").count(), 6);
+    await page.locator("[data-daily-detail=delivered][data-day=today]").click();
+    await page.locator("#metricDialog").waitFor();
+    assert.ok(
+      (await page.locator("#metricRecords").textContent()).includes("0 orders"),
+    );
+    await page.locator("#closeMetric").click();
+
     assert.equal(await page.locator("#orderList").count(), 0);
     await page.locator("#overviewCharts [data-chart-status]").first().click();
     await page
@@ -324,6 +331,17 @@ const fs = require("node:fs"),
       1,
     );
     // Scan an actual Code 128 image, claim a ready order, and start the driver's trip.
+    await page.locator("[data-view=assignments]").click();
+    await page.locator("#addPrintAwbs textarea").fill("DEMO-KW-1004");
+    await page.locator("#addPrintAwbs button").click();
+    await page.locator("#assignmentDriver").selectOption("demo-driver2");
+    await page.locator("#assignmentLeg").selectOption("delivery");
+    await page.locator("#printBatch").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#assignmentResults")
+        .textContent.includes("delivery assigned"),
+    );
     await page.locator("#demoRole").selectOption("demo-driver2");
     await page
       .getByRole("button", { name: "Scan / claim AWB", exact: true })

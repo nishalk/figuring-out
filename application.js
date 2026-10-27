@@ -904,11 +904,12 @@ async function main() {
   app.use((e, q, r, n) => r.status(e.status || 400).json({ error: e.message }));
   // Persist stable pickup identifiers for orders created before vendor tasks existed.
   for (const order of await all("orders")) {
+    const mediaChanged = require("./demo-media").enrichDemoOrder(order);
     if (!order.pickups || !order.trips) {
       pickupTasks(order);
       operations.normaliseTrips(order);
       await save("orders", order);
-    }
+    } else if (mediaChanged) await save("orders", order);
   }
   return app;
 }

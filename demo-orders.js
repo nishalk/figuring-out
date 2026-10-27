@@ -169,6 +169,7 @@ module.exports = async function loadDemoOrders(
           by: "DEMO simulation",
         });
       }
+      require("./demo-media").enrichDemoOrder(o);
       rows.push(o);
     }
   }

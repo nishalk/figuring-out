@@ -162,6 +162,7 @@ function render() {
     ...(ops
       ? [
           { id: "create", label: "New order / Excel", symbol: "plus" },
+          { id: "assignments", label: "Scan & assign", symbol: "truck" },
           { id: "vendors", label: "Vendors", symbol: "vendor" },
           { id: "reports", label: "Reports", symbol: "orders" },
         ]
@@ -172,6 +173,7 @@ function render() {
   pages = pages.filter(
     (p) =>
       !{
+        assignments: "work",
         dashboard: "dashboard",
         reports: "reports",
         create: "create",
@@ -180,6 +182,7 @@ function render() {
       MawadaAccess.allowed(
         state.user,
         {
+          assignments: "work",
           dashboard: "dashboard",
           reports: "reports",
           create: "create",
@@ -190,6 +193,7 @@ function render() {
   if (!pages.some((p) => p.id === view)) view = "orders";
   $("#logout").hidden = false;
   const titles = {
+    assignments: "The right order. The right driver.",
     labels: "Ready to label. Ready to deliver.",
     dashboard: "A beautiful overview of your day.",
     orders: "Every delivery. One clear view.",
@@ -229,6 +233,7 @@ function render() {
   if (view === "reports") renderReports(c);
   if (view === "settings") renderAppearance(c);
   if (view === "labels") renderLabelWorkspace(c);
+  if (view === "assignments") renderAssignmentWorkspace(c);
   if (view === "dashboard") renderExecutiveDashboard(c);
   if (ops && MawadaAccess.allowed(state.user, "dashboard") && view === "orders")
     renderFleet($("#fleetPanel"));
@@ -455,6 +460,17 @@ function orders(c) {
       ) => `<section class="orderCard" data-id="${o.id}" data-status-value="${esc(o.status)}" data-search="${esc([o.awb, o.reference, o.recipient, o.address, o.phone, ...o.items.map((i) => i.vendor.name), state.users.find((u) => u.id === o.driver)?.name || ""].join(" ").toLowerCase())}">
  <div class="orderTop"><div class="orderIdentity"><span class="orderIcon">${icon("box")}</span><div><span class="overline">AIR WAYBILL</span><button class="awbLink" data-open-awb="${esc(o.id)}">${esc(o.awb)}</button><small>Ref. ${esc(o.reference)}</small></div></div><span class="badge ${statusClass(o.status)}">${esc(o.status)}</span></div>
  <div class="orderSummary"><div class="orderDestination"><h3>${esc(o.recipient)}</h3><p>${esc(o.address)}</p><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></div><div class="orderFacts"><span>${o.pickups.length} vendor pickups</span><span>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</span></div></div>
+ ${
+   o.demoData
+     ? o.items
+         .filter((i) => safeProofImage(i.photo))
+         .map(
+           (i) =>
+             `<figure><img class="demoItemPhoto" src="${i.photo}" alt="Demo · ${esc(i.name)}"><figcaption class="sampleMediaNote">Fictional sample item · ${esc(i.name)}</figcaption></figure>`,
+         )
+         .join("")
+     : ""
+ }
  ${orderDeliveryNotes(o)}
  ${journey(o)}
  <div class="orderActionRow"><span class="nextStep">${icon(o.status === "Delivered" ? "check" : "clock")}${esc(nextStep(o))}</span>${button(o, "label", "Print AWB label")}</div>

@@ -61,3 +61,51 @@ test("unfinished overdue work counts as late; unrecognised slot text stays unkno
   assert.equal(d.yesterday.delayRows[0].pending, true);
   assert.equal(d.yesterday.deliveryUnknown, 1);
 });
+
+test("every daily metric has an exact matching drilldown row count including multi-vendor pickups", () => {
+  const date = "2026-10-26",
+    at = "2026-10-26T11:00:00+03:00";
+  const orders = [
+    {
+      id: "o",
+      awb: "KW-1",
+      recipient: "Sample",
+      status: "Delivered",
+      deliveryDate: date,
+      timeSlot: "09:00–10:00",
+      pickups: [
+        {
+          id: "p1",
+          vendor: { name: "A" },
+          dueAt: date + "T09:00:00+03:00",
+          completed: true,
+          proof: { at },
+        },
+        {
+          id: "p2",
+          vendor: { name: "B" },
+          dueAt: date + "T09:00:00+03:00",
+          completed: true,
+          proof: { at },
+        },
+      ],
+      proofs: [{ stage: "Delivered", at }],
+    },
+  ];
+  const result = dailyOverview(
+    orders,
+    Date.parse("2026-10-27T12:00:00+03:00"),
+  ).yesterday;
+  for (const key of [
+    "due",
+    "delivered",
+    "remaining",
+    "pickupsCompleted",
+    "lateDeliveries",
+    "latePickups",
+  ])
+    assert.equal(result.details[key].length, result[key], key);
+  assert.equal(result.details.pickupsCompleted[0].orderId, "o");
+  assert.equal(result.details.latePickups[1].pickupId, "p2");
+  assert.equal(result.details.lateDeliveries[0].orderId, "o");
+});

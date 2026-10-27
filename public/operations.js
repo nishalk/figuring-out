@@ -465,7 +465,7 @@
         (o) => day(deliveryProof(o)?.at) === date,
       );
       const pickups = orders.flatMap((o) =>
-        o.pickups.map((p) => ({ ...p, awb: o.awb })),
+        o.pickups.map((p) => ({ ...p, awb: o.awb, orderId: o.id })),
       );
       const duePickups = pickups.filter((p) => day(p.dueAt) === date);
       const delayRows = due
@@ -480,6 +480,7 @@
         })
         .map((o) => ({
           awb: o.awb,
+          orderId: o.id,
           status: o.status,
           minutes: Math.floor(
             ((deliveryProof(o) ? Date.parse(deliveryProof(o).at) : at) -
@@ -493,7 +494,30 @@
           ? Date.parse(p.proof?.at) > Date.parse(p.dueAt)
           : at > Date.parse(p.dueAt),
       );
+      const orderRow = (o) => ({
+        orderId: o.id,
+        awb: o.awb,
+        recipient: o.recipient,
+        status: o.status,
+      });
+      const pickupRow = (p) => ({
+        orderId: p.orderId,
+        pickupId: p.id,
+        awb: p.awb,
+        vendor: p.vendor.name,
+        status: p.completed ? "Collected" : "Pending",
+      });
       return {
+        details: {
+          due: due.map(orderRow),
+          delivered: completed.map(orderRow),
+          remaining: due.filter((o) => !deliveryProof(o)).map(orderRow),
+          pickupsCompleted: pickups
+            .filter((p) => p.completed && day(p.proof?.at) === date)
+            .map(pickupRow),
+          lateDeliveries: delayRows,
+          latePickups: pickupDelays.map(pickupRow),
+        },
         date,
         due: due.length,
         delivered: completed.length,

@@ -127,6 +127,35 @@
       name: "Sample Driver Two",
       role: "driver",
     });
+  for (const order of data.orders) {
+    order.items.forEach((i) => {
+      i.photo ||= "/brand/demo-gift.png";
+      i.simulatedPhoto = true;
+    });
+    order.proofs ||= [];
+    for (const p of order.pickups)
+      if (p.completed && !p.proof) {
+        p.proof = {
+          name: "DEMO · Vendor contact",
+          at: order.history[0]?.at || new Date().toISOString(),
+          lat: 29.3759,
+          lng: 47.9774,
+          photo: "/brand/demo-gift.png",
+          simulated: true,
+        };
+        order.proofs.push({
+          ...p.proof,
+          stage: "Vendor pickup",
+          vendor: p.vendor.name,
+          pickup: p.id,
+        });
+      }
+    for (const p of order.proofs) {
+      p.simulated = true;
+      if (!p.photo || p.photo === photo) p.photo = "/brand/demo-gift.png";
+      if (p.stage === "Delivered") p.signature ||= "/brand/demo-signature.png";
+    }
+  }
   for (const order of data.orders) RelayOperations.normaliseTrips(order);
   const persist = () => sessionStorage.setItem(key, JSON.stringify(data));
   const current = () => data.users.find((u) => u.id === data.userId);
@@ -438,10 +467,18 @@
         trip.arrivedAt = at;
       } else if (b.action === "assign") {
         assertManager();
+        if (["Delivered", "Out for delivery"].includes(o.status))
+          fail("Cannot reassign during or after delivery");
         o.driver = driver(b.driver);
       } else if (b.action === "assign-pickup") {
         assertManager();
         if (!t || t.completed) fail("Select an incomplete pickup");
+        if (
+          RelayOperations.activeTrips(o).some(
+            (trip) => trip.kind === "pickup" && trip.pickupId === t.id,
+          )
+        )
+          fail("Finish or fail the active pickup trip before reassigning");
         t.driver = driver(b.driver);
       } else if (b.action === "pickup") {
         if (!t || t.completed || !t.driver)
