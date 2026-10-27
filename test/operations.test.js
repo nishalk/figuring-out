@@ -359,6 +359,53 @@ test(
         ),
       );
       assert.ok(examples.some((o) => o.pickups.length === 2));
+      const team = (await req(admin, "state")).users;
+      const adminId = team.find((u) => u.role === "admin").id;
+      await req(admin, "users/" + adminId + "/delete", {}, 409);
+      await req(
+        admin,
+        "users/" + adminId + "/edit",
+        { name: "Dispatcher", email: "admin@example.test", role: "driver" },
+        409,
+      );
+      const restrictedId = team.find(
+        (u) => u.email === "restricted@example.test",
+      ).id;
+      await req(winner, "users/" + restrictedId + "/delete", {}, 403);
+      await req(admin, "users/" + restrictedId + "/edit", {
+        name: "Updated colleague",
+        email: "updated@example.test",
+        role: "operations",
+        password: "replacement-password-123",
+      });
+      await req(restricted, "state", null, 401);
+      await req(
+        restricted,
+        "login",
+        { email: "restricted@example.test", password },
+        401,
+      );
+      await req(restricted, "login", {
+        email: "updated@example.test",
+        password: "replacement-password-123",
+      });
+      assert.equal(
+        (await req(restricted, "state")).user.name,
+        "Updated colleague",
+      );
+      const demoDriver = team.find((u) => u.id === "mawada-demo-driver-1");
+      await req(admin, "users/" + demoDriver.id + "/delete", {}, 409);
+      await req(admin, "users/" + restrictedId + "/delete", {});
+      await req(restricted, "state", null, 401);
+      await req(
+        restricted,
+        "login",
+        { email: "updated@example.test", password: "replacement-password-123" },
+        401,
+      );
+      assert.ok(
+        !(await req(admin, "state")).users.some((u) => u.id === restrictedId),
+      );
     } finally {
       if (child.exitCode === null) {
         const done = new Promise((r) => child.once("exit", r));

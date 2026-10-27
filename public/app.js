@@ -273,7 +273,38 @@ function users(c) {
           `<label><input type="checkbox" name="permissions" value="${key}" ${MawadaAccess.allowed(user, key) ? "checked" : ""} ${!MawadaAccess.defaults[user.role]?.includes(key) || user.role === "admin" ? "disabled" : ""}> ${esc(label)}</label>`,
       )
       .join("")}</div>`;
-  c.innerHTML = `<section><h2>Team access</h2><p>Administrators have full access and manage the team. Operations can manage all orders. Warehouse handles receipt and warehouse actions. Drivers access only assigned orders and available AWB claims. Checklists restrict access within each role; they cannot expand it.</p>${window.relayDemo ? '<p class="demoAccountNotice">This is a sample demo. Team accounts here cannot sign in. <a href="/">Open the live app to create real accounts</a>.</p>' : ""}<h3>Create team member</h3><form id="user"><div class="grid">${field("name", "Name")}${field("email", "Email", "email")}${field("password", "Password (12+ characters)", "password")}<label>Role<select name="role">${["operations", "warehouse", "driver", "admin"].map((r) => `<option>${r}</option>`).join("")}</select></label></div><div id="newPermissions"></div><button ${window.relayDemo ? "disabled" : ""}>Create user</button></form></section>${state.users.map((u) => `<section><h3>${esc(u.name)} · ${esc(u.role)}</h3><p>${esc(u.email || "Sample account")}</p><form data-user-permissions="${esc(u.id)}">${checklist(u)}${u.role === "admin" ? "<p>Administrator access is fixed.</p>" : `<button ${window.relayDemo ? "disabled" : ""}>Save access</button>`}</form></section>`).join("")}`;
+  c.innerHTML = `<section><h2>Team access</h2><p>Administrators have full access and manage the team. Operations can manage all orders. Warehouse handles receipt and warehouse actions. Drivers access only assigned orders and available AWB claims. Checklists restrict access within each role; they cannot expand it.</p>${window.relayDemo ? '<p class="demoAccountNotice">This is a sample demo. Team accounts here cannot sign in. <a href="/">Open the live app to create real accounts</a>.</p>' : ""}<h3>Create team member</h3><form id="user"><div class="grid">${field("name", "Name")}${field("email", "Email", "email")}${field("password", "Password (12+ characters)", "password")}<label>Role<select name="role">${["operations", "warehouse", "driver", "admin"].map((r) => `<option>${r}</option>`).join("")}</select></label></div><div id="newPermissions"></div><button ${window.relayDemo ? "disabled" : ""}>Create user</button></form></section>${state.users.map((u) => `<section><h3>${esc(u.name)} · ${esc(u.role)}</h3><p>${esc(u.email || "Sample account")}</p><details><summary>Edit account</summary><form data-edit-user="${esc(u.id)}"><div class="grid"><label>Name<input name="name" value="${esc(u.name)}" required></label><label>Email<input name="email" type="email" value="${esc(u.email || "")}" required></label><label>Role<select name="role">${["admin", "operations", "warehouse", "driver"].map((role) => `<option ${role === u.role ? "selected" : ""}>${role}</option>`).join("")}</select></label><label>New password (leave blank to keep)<input name="password" type="password" minlength="12" autocomplete="new-password"></label></div><button ${window.relayDemo ? "disabled" : ""}>Save user</button></form></details>${u.id !== state.user.id ? `<button class="ghost" data-delete-user="${esc(u.id)}" ${window.relayDemo ? "disabled" : ""}>Delete user</button>` : ""}<form data-user-permissions="${esc(u.id)}">${checklist(u)}${u.role === "admin" ? "<p>Administrator access is fixed.</p>" : `<button ${window.relayDemo ? "disabled" : ""}>Save access</button>`}</form></section>`).join("")}`;
+  c.querySelectorAll("[data-edit-user]").forEach(
+    (f) =>
+      (f.onsubmit = (e) => {
+        e.preventDefault();
+        run(async () => {
+          await api(
+            "users/" + encodeURIComponent(f.dataset.editUser) + "/edit",
+            Object.fromEntries(new FormData(f)),
+          );
+          await refresh("User updated");
+        });
+      }),
+  );
+  c.querySelectorAll("[data-delete-user]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        if (
+          !confirm(
+            "Delete this user’s access? Historical delivery records will be kept.",
+          )
+        )
+          return;
+        run(async () => {
+          await api(
+            "users/" + encodeURIComponent(b.dataset.deleteUser) + "/delete",
+            {},
+          );
+          await refresh("User deleted");
+        });
+      }),
+  );
   const form = c.querySelector("#user");
   const update = () =>
     (c.querySelector("#newPermissions").innerHTML = checklist({

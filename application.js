@@ -96,11 +96,16 @@ async function main() {
     const u = (await all("users")).find(
       (u) => u.email === String(q.body.email).trim().toLowerCase(),
     );
-    if (!u || !bcrypt.compareSync(q.body.password || "", u.password))
+    if (
+      !u ||
+      u.deletedAt ||
+      !bcrypt.compareSync(q.body.password || "", u.password)
+    )
       return r.status(401).json({ error: "Invalid login" });
     q.session.regenerate((e) => {
       if (e) return r.sendStatus(500);
       q.session.uid = u.id;
+      q.session.authVersion = u.authVersion || 0;
       q.session.save((error) =>
         error
           ? r.status(500).json({ error: "Could not save login session" })
@@ -118,7 +123,12 @@ async function main() {
   );
   app.use("/api", async (q, r, n) => {
     q.user = await get("users", q.session.uid);
-    if (!q.user) return r.status(401).json({ error: "Sign in required" });
+    if (
+      !q.user ||
+      q.user.deletedAt ||
+      (q.session.authVersion || 0) !== (q.user.authVersion || 0)
+    )
+      return r.status(401).json({ error: "Sign in required" });
     if (q.method !== "GET" && q.get("sec-fetch-site") === "cross-site")
       return r.sendStatus(403);
     n();
@@ -166,7 +176,10 @@ async function main() {
       );
     const users = ["admin", "operations"].includes(q.user.role)
       ? (await all("users"))
-          .filter((u) => q.user.role === "admin" || u.role === "driver")
+          .filter(
+            (u) =>
+              !u.deletedAt && (q.user.role === "admin" || u.role === "driver"),
+          )
           .map(
             ({
               password,
@@ -185,7 +198,10 @@ async function main() {
       vendors: q.user.role === "driver" ? [] : await all("vendors"),
       orders,
       fleet: access.allowed(q.user, "dashboard")
-        ? operations.fleet(await all("users"), orders)
+        ? operations.fleet(
+            (await all("users")).filter((u) => !u.deletedAt),
+            orders,
+          )
         : undefined,
     });
   });
@@ -214,9 +230,93 @@ async function main() {
     });
     r.json({ ok: true });
   });
+  const hasOpenWork = async (id) =>
+    (await all("orders")).some(
+      (o) =>
+        (o.driver === id && o.status !== "Delivered") ||
+        (o.pickups || []).some((p) => p.driver === id && !p.completed) ||
+        (o.trips || []).some(
+          (t) => t.driver === id && t.status === "In transit",
+        ),
+    );
+  app.post("/api/users/:id/edit", permit("admin"), async (q, r) => {
+    const user = await get("users", q.params.id);
+    if (!user || user.deletedAt)
+      return r.status(404).json({ error: "User not found" });
+    const name = String(q.body.name || "").trim(),
+      email = String(q.body.email || "")
+        .trim()
+        .toLowerCase(),
+      role = q.body.role;
+    if (
+      !name ||
+      !email.includes("@") ||
+      !["admin", "operations", "warehouse", "driver"].includes(role) ||
+      (q.body.password &&
+        (typeof q.body.password !== "string" || q.body.password.length < 12))
+    )
+      return r.status(400).json({
+        error:
+          "Valid name, email, role and optional password of at least 12 characters required",
+      });
+    if (user.id === q.user.id && role !== "admin")
+      return r
+        .status(409)
+        .json({ error: "You cannot remove your own administrator role" });
+    if (role !== user.role && (await hasOpenWork(user.id)))
+      return r
+        .status(409)
+        .json({ error: "Reassign active work before changing this role" });
+    if ((await all("users")).some((u) => u.id !== user.id && u.email === email))
+      return r.status(409).json({ error: "Email is already in use" });
+    const before = { name: user.name, email: user.email, role: user.role };
+    if (role !== user.role) {
+      delete user.permissions;
+      user.authVersion = (user.authVersion || 0) + 1;
+    }
+    Object.assign(user, { name, email, role });
+    if (q.body.password) {
+      user.password = bcrypt.hashSync(q.body.password, 12);
+      user.authVersion = (user.authVersion || 0) + 1;
+    }
+    user.accountHistory = [
+      ...(user.accountHistory || []),
+      {
+        event: "Edited",
+        by: q.user.id,
+        at: new Date().toISOString(),
+        before,
+        after: { name, email, role },
+        passwordReset: Boolean(q.body.password),
+      },
+    ].slice(-100);
+    await save("users", user);
+    if (user.id === q.user.id) q.session.authVersion = user.authVersion || 0;
+    r.json({ ok: true });
+  });
+  app.post("/api/users/:id/delete", permit("admin"), async (q, r) => {
+    const user = await get("users", q.params.id);
+    if (!user || user.deletedAt)
+      return r.status(404).json({ error: "User not found" });
+    if (user.id === q.user.id)
+      return r
+        .status(409)
+        .json({ error: "You cannot delete your own account" });
+    if (await hasOpenWork(user.id))
+      return r.status(409).json({
+        error:
+          "Reassign this user’s active orders, pickups and trips before deleting",
+      });
+    user.deletedAt = new Date().toISOString();
+    user.deletedBy = q.user.id;
+    user.authVersion = (user.authVersion || 0) + 1;
+    await save("users", user);
+    r.json({ ok: true });
+  });
   app.post("/api/users/:id/permissions", permit("admin"), async (q, r) => {
     const user = await get("users", q.params.id);
-    if (!user) return r.status(404).json({ error: "User not found" });
+    if (!user || user.deletedAt)
+      return r.status(404).json({ error: "User not found" });
     if (user.role === "admin")
       return r
         .status(400)
@@ -477,7 +577,7 @@ async function main() {
         warehouse = ["admin", "warehouse"].includes(q.user.role);
       const driver = async () => {
         const d = await get("users", q.body.driver);
-        if (d?.role !== "driver") throw Error("Choose a driver");
+        if (d?.role !== "driver" || d.deletedAt) throw Error("Choose a driver");
         return d.id;
       };
       const deny = () => r.status(403).json({ error: "Access denied" });
