@@ -148,6 +148,8 @@ function auth(setup, keyRequired = false) {
   };
 }
 function render() {
+  labelReader?.reset();
+  labelReader = null;
   releaseFleetMap();
   const admin = state.user.role === "admin",
     ops = admin || state.user.role === "operations";
@@ -156,6 +158,7 @@ function render() {
       ? [{ id: "dashboard", label: "Dashboard", symbol: "warehouse" }]
       : []),
     { id: "orders", label: "Orders", symbol: "orders" },
+    { id: "labels", label: "AWB printing", symbol: "box" },
     ...(ops
       ? [
           { id: "create", label: "New order / Excel", symbol: "plus" },
@@ -187,6 +190,7 @@ function render() {
   if (!pages.some((p) => p.id === view)) view = "orders";
   $("#logout").hidden = false;
   const titles = {
+    labels: "Ready to label. Ready to deliver.",
     dashboard: "A beautiful overview of your day.",
     orders: "Every delivery. One clear view.",
     create: "A new journey starts here.",
@@ -224,6 +228,7 @@ function render() {
   if (view === "users") users(c);
   if (view === "reports") renderReports(c);
   if (view === "settings") renderAppearance(c);
+  if (view === "labels") renderLabelWorkspace(c);
   if (view === "dashboard") renderExecutiveDashboard(c);
   if (ops && MawadaAccess.allowed(state.user, "dashboard") && view === "orders")
     renderFleet($("#fleetPanel"));
@@ -448,7 +453,7 @@ function orders(c) {
       (
         o,
       ) => `<section class="orderCard" data-id="${o.id}" data-status-value="${esc(o.status)}" data-search="${esc([o.awb, o.reference, o.recipient, o.address, o.phone, ...o.items.map((i) => i.vendor.name), state.users.find((u) => u.id === o.driver)?.name || ""].join(" ").toLowerCase())}">
- <div class="orderTop"><div class="orderIdentity"><span class="orderIcon">${icon("box")}</span><div><span class="overline">AIR WAYBILL</span><b>${esc(o.awb)}</b><small>Ref. ${esc(o.reference)}</small></div></div><span class="badge ${statusClass(o.status)}">${esc(o.status)}</span></div>
+ <div class="orderTop"><div class="orderIdentity"><span class="orderIcon">${icon("box")}</span><div><span class="overline">AIR WAYBILL</span><button class="awbLink" data-open-awb="${esc(o.id)}">${esc(o.awb)}</button><small>Ref. ${esc(o.reference)}</small></div></div><span class="badge ${statusClass(o.status)}">${esc(o.status)}</span></div>
  <div class="orderSummary"><div class="orderDestination"><h3>${esc(o.recipient)}</h3><p>${esc(o.address)}</p><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></div><div class="orderFacts"><span>${o.pickups.length} vendor pickups</span><span>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</span></div></div>
  ${orderDeliveryNotes(o)}
  ${journey(o)}
@@ -645,14 +650,9 @@ function orders(c) {
   );
 }
 function printLabel(o) {
-  $("#labelContent").innerHTML =
-    `<h2>RELAY · KUWAIT</h2><img class="barcode" src="${window.relayDemo ? "/demo/barcode/" + o.awb : "/api/orders/" + o.id + "/awb"}" alt="AWB barcode"><h3>${esc(o.awb)}</h3><p>Reference: ${esc(o.reference)}</p><h3>${esc(o.recipient)}</h3><p>${esc(o.phone)}</p><p>${esc(o.address)}</p><hr><p>${o.items.length} item lines · ${o.items.reduce((n, i) => n + i.quantity, 0)} units</p>${o.items.map((i) => `<p>${esc(i.name)} × ${i.quantity} · ${esc(i.vendor.name)}</p>`).join("")}`;
-  $("#label").showModal();
-  const img = $("#labelContent img");
-  $("#printLabel").disabled = true;
-  img.onload = () => ($("#printLabel").disabled = false);
-  img.onerror = () => alert("Label could not load. Close and retry.");
+  showPrintLabels([o]);
 }
+
 let dispatchOrder,
   failureOrder,
   failureAction = "fail",

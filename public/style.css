@@ -2572,3 +2572,81 @@ canvas {
   opacity: 0.1;
   pointer-events: none;
 }
+.awbLink {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+#orderDetailDialog {
+  width: min(900px, 95vw);
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow: auto;
+}
+.proofCard {
+  padding: 18px;
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.proofEvidence {
+  width: min(280px, 100%);
+  max-height: 300px;
+  object-fit: contain;
+  margin: 8px;
+}
+.signatureEvidence {
+  background: white;
+}
+#proofLocationMap,
+#driverTrailMap {
+  height: 300px;
+  border-radius: 16px;
+  margin: 16px 0;
+}
+#labelVideo {
+  width: 100%;
+  max-height: 280px;
+}
+.printAwb {
+  color: #17121a;
+  background: white;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+}
+.printAwb p,
+.printAwb h2,
+.printAwb h3 {
+  color: #17121a;
+}
+.printAwb h2 {
+  font-size: 18px;
+}
+.printAwb .barcode {
+  max-width: 100%;
+  height: 90px;
+  object-fit: contain;
+}
+@media print {
+  .printAwb {
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+  .printAwb:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  #labelContent {
+    display: block;
+  }
+}

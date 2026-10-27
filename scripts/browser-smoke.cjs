@@ -254,6 +254,57 @@ const fs = require("node:fs"),
     await page.pdf({ path: path.join(os.tmpdir(), "relay-demo-label.pdf") });
     await page.emulateMedia({ media: "screen" });
     await page.locator("#label [data-close]").click();
+    await order().locator("[data-open-awb]").click();
+    await page.locator("#orderDetailDialog").waitFor();
+    assert.ok(
+      (await page.locator("#orderDetailContent").textContent()).includes(
+        "Sample receiver",
+      ),
+    );
+    assert.equal(
+      await page
+        .locator('#orderDetailContent img[alt="Recipient signature"]')
+        .count(),
+      1,
+    );
+    await page.locator("#orderDetailContent [data-proof-pin]").last().click();
+    assert.equal(
+      await page.locator("#proofLocationMap .leaflet-marker-icon").count(),
+      1,
+    );
+    await page.locator("#closeOrderDetail").click();
+    await page.locator("[data-view=labels]").click();
+    await page
+      .locator("#addPrintAwbs textarea")
+      .fill("DEMO-KW-1001, DEMO-KW-1002 DEMO-KW-1001");
+    await page.locator("#addPrintAwbs button").click();
+    await page
+      .getByRole("heading", { name: "2 labels selected", exact: true })
+      .waitFor();
+    const labelBarcode = await context.request.get(
+      url + "/demo/barcode/DEMO-KW-1004",
+    );
+    await page.locator("#labelScanImage").setInputFiles({
+      name: "awb.png",
+      mimeType: "image/png",
+      buffer: await labelBarcode.body(),
+    });
+    await page
+      .getByRole("heading", { name: "3 labels selected", exact: true })
+      .waitFor();
+    await page.locator("#printBatch").click();
+    await page.waitForFunction(
+      () => !document.querySelector("#printLabel").disabled,
+    );
+    assert.equal(await page.locator("#labelContent .printAwb").count(), 3);
+    assert.ok(
+      (await page.locator("#labelContent").textContent()).includes(
+        "total units",
+      ),
+    );
+    await page.locator("#label [data-close]").click();
+    await page.locator("[data-view=orders]").click();
+
     await page.locator("#demoRole").selectOption("demo-driver");
     await page.getByRole("heading", { name: "Order board" }).waitFor();
     assert.equal(

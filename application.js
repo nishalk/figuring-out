@@ -102,6 +102,13 @@ async function main() {
       !bcrypt.compareSync(q.body.password || "", u.password)
     )
       return r.status(401).json({ error: "Invalid login" });
+    if (u.role === "driver") {
+      u.activity = [
+        ...(u.activity || []),
+        { event: "Signed in", at: new Date().toISOString(), actorId: u.id },
+      ].slice(-500);
+      await save("users", u);
+    }
     q.session.regenerate((e) => {
       if (e) return r.sendStatus(500);
       q.session.uid = u.id;
@@ -113,14 +120,32 @@ async function main() {
       );
     });
   });
-  app.post("/api/logout", (q, r) =>
+  app.post("/api/logout", async (q, r) => {
+    try {
+      const user = await get("users", q.session.uid);
+      if (user?.role === "driver" && !user.deletedAt) {
+        user.activity = [
+          ...(user.activity || []),
+          {
+            event: "Signed out",
+            at: new Date().toISOString(),
+            actorId: user.id,
+          },
+        ].slice(-500);
+        await save("users", user);
+      }
+    } catch (error) {
+      return r
+        .status(409)
+        .json({ error: "Could not record sign out. Please retry." });
+    }
     q.session.destroy((error) => {
       if (error)
         return r.status(500).json({ error: "Sign out failed; try again" });
       r.clearCookie("connect.sid", { path: "/" });
       r.json({ ok: true });
-    }),
-  );
+    });
+  });
   app.use("/api", async (q, r, n) => {
     q.user = await get("users", q.session.uid);
     if (
@@ -184,6 +209,7 @@ async function main() {
             ({
               password,
               locationHistory,
+              activity,
               stationary,
               locationAlerts,
               alertReviews,
@@ -860,6 +886,12 @@ async function main() {
         event: action,
         by: q.user.name,
         actorId: q.user.id,
+        position:
+          q.user.role === "driver" &&
+          q.user.lastLocation &&
+          Date.now() - Date.parse(q.user.lastLocation.at) <= 120000
+            ? q.user.lastLocation
+            : null,
         driverId: o.driver,
         at: new Date().toISOString(),
         ...detail,

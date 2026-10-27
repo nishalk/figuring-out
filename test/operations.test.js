@@ -128,6 +128,8 @@ test(
         },
         400,
       );
+      await req(winner, "driver/shift", { action: "start" });
+      await req(winner, "driver/shift", { action: "start" }, 409);
       await action(winner, {
         action: "start-pickup-trip",
         pickup: o.pickups[0].id,
@@ -156,6 +158,7 @@ test(
       );
       assert.equal(fleet.activeTrips.length, 1);
       assert.equal(fleet.pendingPickups, 1);
+      await req(winner, "driver/shift", { action: "end" }, 409);
       assert.equal(fleet.assignedOrders, 1);
       await req(
         winner,
@@ -175,6 +178,8 @@ test(
         accuracy: 8,
         driverId: loserId,
       });
+      await req(winner, "labels/audit", { orderIds: [o.id] });
+      await req(loser, "labels/audit", { orderIds: [o.id] }, 403);
       const tracked = await req(admin, "state");
       assert.equal(
         tracked.fleet.find((d) => d.id === winnerId).lastLocation.lat,
@@ -222,6 +227,18 @@ test(
         verifiedItems: [o.items[0].id],
         ...proof,
       });
+      await req(winner, "driver/shift", { action: "end" });
+      const activity = await req(admin, "fleet/" + winnerId + "/activity");
+      assert.equal(activity.shift.active, false);
+      assert.ok(activity.events.some((e) => e.event === "Shift started"));
+      assert.ok(
+        activity.events.some((e) => e.event === "pickup" && e.orderId === o.id),
+      );
+      assert.ok(activity.positions.length > 0);
+      assert.ok(
+        activity.events.some((e) => e.event === "AWB labels previewed"),
+      );
+      await req(winner, "fleet/" + loserId + "/activity", null, 403);
       const afterPickup = await req(admin, "state");
       assert.equal(
         afterPickup.orders[0].pickups[0].proof.gpsAtCapture.lat,
@@ -338,6 +355,7 @@ test(
         password,
       });
       await req(restricted, "reports", null, 403);
+      await req(restricted, "fleet/" + winnerId + "/activity", null, 403);
       await req(
         restricted,
         "vendors",

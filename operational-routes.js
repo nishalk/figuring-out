@@ -38,6 +38,18 @@ module.exports = function install(app, store, permit) {
         error:
           "This order is not available to claim. It may be assigned to another driver or not ready.",
       });
+    const lookupUser = await store.get("users", q.user.id);
+    lookupUser.activity = [
+      ...(lookupUser.activity || []),
+      {
+        event: "AWB scanned / looked up",
+        at: now(),
+        actorId: q.user.id,
+        orderId: order.id,
+        awb: order.awb,
+      },
+    ].slice(-500);
+    await store.save("users", lookupUser);
     r.json({
       id: order.id,
       awb: order.awb,
@@ -82,6 +94,61 @@ module.exports = function install(app, store, permit) {
     });
     r.json(await store.save("orders", order));
   });
+  app.post("/api/driver/shift", driver, async (q, r) => {
+    const user = await store.get("users", q.user.id),
+      at = now();
+    user.activity ||= [];
+    if (q.body.action === "start") {
+      if (user.shift?.active)
+        return r.status(409).json({ error: "Shift already started" });
+      user.shift = { active: true, startedAt: at };
+    } else if (q.body.action === "end") {
+      if (!user.shift?.active)
+        return r.status(409).json({ error: "No active shift" });
+      if (
+        (await store.all("orders")).some((o) =>
+          rules.activeTrips(o).some((t) => t.driver === user.id),
+        )
+      )
+        return r.status(409).json({
+          error: "Complete or reconcile active trips before ending the shift",
+        });
+      user.shift = { ...user.shift, active: false, endedAt: at };
+    } else return r.status(400).json({ error: "Choose start or end" });
+    user.activity = [
+      ...user.activity,
+      {
+        event: q.body.action === "start" ? "Shift started" : "Shift ended",
+        at,
+        actorId: user.id,
+      },
+    ].slice(-500);
+    await store.save("users", user);
+    r.json({ ok: true, shift: user.shift });
+  });
+  app.get("/api/fleet/:id/activity", manager, async (q, r) => {
+    if (!require("./public/access").allowed(q.user, "dashboard"))
+      return r.status(403).json({ error: "Driver tracking access required" });
+    const user = await store.get("users", q.params.id);
+    if (!user || user.role !== "driver" || user.deletedAt)
+      return r.status(404).json({ error: "Driver not found" });
+    const events = [...(user.activity || [])];
+    for (const o of await store.all("orders"))
+      for (const h of o.history || [])
+        if (h.actorId === user.id)
+          events.push({ ...h, awb: o.awb, orderId: o.id });
+    r.json({
+      driverId: user.id,
+      shift: user.shift || null,
+      events: events
+        .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+        .slice(0, 500),
+      positions: (user.locationHistory || [])
+        .filter((p) => Date.now() - Date.parse(p.at) <= 86400000)
+        .slice(-2000),
+      lastLocation: user.lastLocation || null,
+    });
+  });
   app.post("/api/driver/location", driver, async (q, r) => {
     if (!validPosition(q.body))
       return r
@@ -103,6 +170,16 @@ module.exports = function install(app, store, permit) {
       return r.status(400).json({ error: "Choose whether to share location." });
     const user = await store.get("users", q.user.id);
     user.locationSharing = q.body.enabled;
+    user.activity = [
+      ...(user.activity || []),
+      {
+        event: q.body.enabled
+          ? "Location sharing enabled"
+          : "Location sharing paused",
+        at: now(),
+        actorId: user.id,
+      },
+    ].slice(-500);
     await store.save("users", user);
     r.json({ ok: true });
   });
@@ -129,6 +206,40 @@ module.exports = function install(app, store, permit) {
       by: q.user.name,
       at: now(),
     };
+    await store.save("users", user);
+    r.json({ ok: true });
+  });
+  app.post("/api/labels/audit", async (q, r) => {
+    const ids = q.body.orderIds;
+    if (
+      !Array.isArray(ids) ||
+      !ids.length ||
+      ids.length > 100 ||
+      ids.some((id) => typeof id !== "string")
+    )
+      return r.status(400).json({ error: "Choose 1–100 label orders" });
+    const orders = await store.all("orders");
+    const selected = ids.map((id) => orders.find((o) => o.id === id));
+    if (
+      selected.some(
+        (o) =>
+          !o ||
+          (q.user.role === "driver" &&
+            o.driver !== q.user.id &&
+            !o.pickups.some((p) => p.driver === q.user.id)),
+      )
+    )
+      return r.status(403).json({ error: "Order not accessible" });
+    const user = await store.get("users", q.user.id);
+    user.activity = [
+      ...(user.activity || []),
+      {
+        event: "AWB labels previewed",
+        at: now(),
+        actorId: user.id,
+        awbs: selected.map((o) => o.awb),
+      },
+    ].slice(-500);
     await store.save("users", user);
     r.json({ ok: true });
   });

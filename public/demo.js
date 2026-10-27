@@ -241,7 +241,38 @@
         persist();
         return clone(o);
       }
-      if (url === "driver/location") {
+      if (url === "driver/shift") {
+        if (b.action === "start") {
+          if (current().shift?.active) fail("Shift already started");
+          current().shift = {
+            active: true,
+            startedAt: new Date().toISOString(),
+          };
+        } else if (b.action === "end") {
+          if (!current().shift?.active) fail("No active shift");
+          if (
+            data.orders.some((o) =>
+              RelayOperations.activeTrips(o).some(
+                (t) => t.driver === current().id,
+              ),
+            )
+          )
+            fail("Complete active trips before ending the shift");
+          current().shift = {
+            ...current().shift,
+            active: false,
+            endedAt: new Date().toISOString(),
+          };
+        } else fail("Choose start or end");
+        current().activity = [
+          ...(current().activity || []),
+          {
+            event: b.action === "start" ? "Shift started" : "Shift ended",
+            at: new Date().toISOString(),
+            actorId: current().id,
+          },
+        ];
+      } else if (url === "driver/location") {
         if (
           !Number.isFinite(b.lat) ||
           !Number.isFinite(b.lng) ||
