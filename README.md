@@ -31,7 +31,7 @@ Implemented: user roles, vendor address snapshots, itemized orders, Excel valida
 
 Existing orders are migrated to stable vendor tasks on server startup. Previously completed aggregate pickups are marked historical; separate vendor proof is not invented. Historical pickup drivers use the prior order assignment where available.
 
-This is a prototype, not production-ready dispatch software. Customer messaging/tracking, API integrations, account recovery, rate limiting, persistent session storage, pagination, production hosting and automated backups remain outstanding. No public tracking URLs are exposed. Session memory resets on restart. Camera, signature usability, barcode scanning/printing and GPS require validation on real Android devices over HTTPS. Proof validation checks file signatures but is not a full image decoder.
+This remains a prototype requiring a controlled production trial. Operations control, WhatsApp queueing/private tracking, email recovery, authentication throttles, durable local sessions and verified local SQLite backups are implemented; provider configuration, off-host recovery, live hosting validation and pagination remain outstanding. Camera, signature usability, barcode scanning/printing, offline drafts and GPS require validation on real Android devices over HTTPS. Proof validation checks file signatures but is not a full image decoder.
 
 ## Tests
 
@@ -80,3 +80,13 @@ No new Supabase tables or SQL changes are required: trip/history fields remain i
 See [the reference review and import contract](docs/fareye-reference.md). Mawada uploads now have a Kuwait-today selection and exclusion preview, saved delivery instructions/value/bell/card fields, and an auditable occasion review. The actual Mawada CMS export has not been supplied yet; mapping against its real layout remains unverified. Occasion suggestions currently use transparent text rules and are marked unconfirmed, not presented as AI model results.
 
 Driver workload profiles and reviewable location signals: see [driver monitoring](docs/driver-monitoring.md). Open Fleet control → View driver to inspect shipments, pickups, trips and review notes.
+
+## Operations control and reliability
+
+Open **Operations control** for an actionable daily exception queue, named recovery plans and follow-ups, delivery/pickup commitments, area/vendor/window filters, bulk assignment previews, a delivery performance scorecard and reviewable WhatsApp updates. Drivers get a suggested next stop, navigation/call links and on-device proof drafts with explicit upload retry. New manually created orders support delivery dates, areas, windows and customer WhatsApp consent. Import mappings are saved per account; duplicate references require review and an explicit skip choice.
+
+Read the [COO operating playbook](docs/operations-playbook.md) for the morning/during-day/close routine, responsibilities, exception rules and KPI definitions. Read [service configuration](docs/service-configuration.md) for WhatsApp Business, email recovery, persistent sessions and backup/restore setup. Customer updates use WhatsApp; recovery uses emailed single-use links through Resend. Provider APIs are stubbed in local tests; live acceptance/receipt still requires account configuration and consented trial contacts.
+
+Production SQLite attempts a verified local backup on startup and every 24 hours, keeping seven copies by default. `npm run backup`, `npm run backup:verify -- FILE` and `npm run backup:restore -- FILE ABSOLUTE_EMPTY_DIRECTORY` provide operator tools. This does not create off-host copies or establish a complete disaster-recovery service. Supabase requires its provider backup workflow. Sessions/throttles persist in `DATA_DIR/runtime.db` and require a stable secret and persistent volume even with remote operational storage. One app instance is supported.
+
+`npm test` includes operating-rule/API tests for revision-safe assignment, recovery plans, private tracking, concurrent send protection, one-time resets, session restart retention and a backup restore rehearsal. `npm run test:browser` now runs both the existing smoke check and a live isolated control/driver test, including offline proof persistence, reload and explicit successful upload retry.

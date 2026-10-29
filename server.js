@@ -17,6 +17,9 @@ app.get("/assets/zxing.js", (_, res) =>
   res.sendFile(require.resolve("@zxing/library/umd/index.min.js")),
 );
 app.use(express.static(path.join(__dirname, "public"), { index: false }));
+app.get(["/track", "/reset"], (_, res) =>
+  res.sendFile(path.join(__dirname, "public/customer.html")),
+);
 app.get("/driver", (_, res) =>
   res.sendFile(path.join(__dirname, "public/index.html")),
 );

@@ -37,6 +37,7 @@ async function api(url, body) {
     throw Object.assign(Error(j.error || "Request failed"), {
       status: r.status,
       code: j.code,
+      duplicates: j.duplicates,
     });
   return j;
 }
@@ -128,13 +129,30 @@ async function boot() {
       else throw error;
     }
   } catch (error) {
-    app.innerHTML = `<section class="auth"><h1>App setup needs attention</h1><p>${esc(error.message)}</p><p>Your data has not been moved or replaced.</p><button id="retryStartup">Try again</button><a class="primaryLink" href="/demo">Try the sample-data demo</a><p class="muted">The demo is separate from your operational data. Share the error code with your administrator: ${esc(error.code || "CONNECTION_ERROR")}</p></section>`;
+    app.innerHTML = `<section class="auth"><h1>App setup needs attention</h1><p>${esc(error.message)}</p><p>Your data has not been moved or replaced. On-device proof drafts are retained; reconnect and sign in with the same account to review them.</p><button id="retryStartup">Try again</button><a class="primaryLink" href="/demo">Try the sample-data demo</a><p class="muted">The demo is separate from your operational data. Share the error code with your administrator: ${esc(error.code || "CONNECTION_ERROR")}</p></section>`;
     $("#retryStartup").onclick = boot;
   }
 }
 
 function auth(setup, keyRequired = false) {
   app.innerHTML = `<section class="auth"><h1>${setup ? "Set up Mawada Experience Managers" : "Welcome back"}</h1><p>${setup ? "Create your administrator account. Use a password of at least 12 characters." : "Sign in to your delivery workspace."}</p><form id="auth">${setup ? field("name", "Your name") : ""}${setup && keyRequired ? field("setupKey", "Setup key (Hostinger SETUP_KEY)", "password") : ""}${field("email", "Email", "email")}${field("password", "Password", "password")}<button>${setup ? "Create administrator" : "Sign in"}</button></form></section>`;
+  if (!setup && !window.relayDemo) {
+    app
+      .querySelector(".auth")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<details><summary>Forgot your password?</summary><form id="requestRecovery"><label>Account email<input name="email" type="email" required autocomplete="email"></label><button>Email a reset link</button><p role="status" id="recoveryStatus"></p></form></details>',
+      );
+    $("#requestRecovery").onsubmit = (e) => {
+      e.preventDefault();
+      run(async () => {
+        const result = await api("recovery/request", {
+          email: new FormData(e.target).get("email"),
+        });
+        $("#recoveryStatus").textContent = result.message;
+      });
+    };
+  }
   $("#auth").onsubmit = (e) => {
     e.preventDefault();
     run(async () => {
@@ -155,7 +173,10 @@ function render() {
     ops = admin || state.user.role === "operations";
   let pages = [
     ...(ops
-      ? [{ id: "dashboard", label: "Dashboard", symbol: "warehouse" }]
+      ? [
+          { id: "dashboard", label: "Dashboard", symbol: "warehouse" },
+          { id: "control", label: "Operations control", symbol: "alert" },
+        ]
       : []),
     { id: "orders", label: "Orders", symbol: "orders" },
     { id: "labels", label: "AWB printing", symbol: "box" },
@@ -174,6 +195,7 @@ function render() {
     (p) =>
       !{
         assignments: "work",
+        control: "dashboard",
         dashboard: "dashboard",
         reports: "reports",
         create: "create",
@@ -183,6 +205,7 @@ function render() {
         state.user,
         {
           assignments: "work",
+          control: "dashboard",
           dashboard: "dashboard",
           reports: "reports",
           create: "create",
@@ -193,6 +216,7 @@ function render() {
   if (!pages.some((p) => p.id === view)) view = "orders";
   $("#logout").hidden = false;
   const titles = {
+    control: "Keep every delivery promise in view.",
     assignments: "The right order. The right driver.",
     labels: "Ready to label. Ready to deliver.",
     dashboard: "A beautiful overview of your day.",
@@ -235,6 +259,7 @@ function render() {
   if (view === "labels") renderLabelWorkspace(c);
   if (view === "assignments") renderAssignmentWorkspace(c);
   if (view === "dashboard") renderExecutiveDashboard(c);
+  if (view === "control") renderControlWorkspace(c);
   if (ops && MawadaAccess.allowed(state.user, "dashboard") && view === "orders")
     renderFleet($("#fleetPanel"));
 }
@@ -352,7 +377,7 @@ function users(c) {
 }
 
 function create(c) {
-  c.innerHTML = `<section><h2>Create order</h2><form id="order"><div class="grid">${field("reference", "Your order reference")}${field("recipient", "Recipient name")}${field("phone", "Phone (+965 followed by 8 digits)")}${field("address", "Delivery address")}</div><h3>Items and pickups</h3><div id="items"></div><button type="button" id="add">Add item</button><button>Create order</button></form></section><section><h2>Upload Excel (.xlsx)</h2><a class="primaryLink" href="${window.relayDemo ? "/Mawada-CMS-Order-Template.xlsx" : "/api/import/template"}" download="Mawada-CMS-Order-Template.xlsx">Download CMS Excel template</a><p class="muted">Includes required/optional fields, multi-item example rows and CMS instructions. Remove example rows before import. Template download requires a live account with order import access.</p><label>Export format<select id="importFormat"><option value="mawada">Mawada CMS · deliveries due today (Kuwait)</option><option value="template">Mawada item-row template</option></select></label><p>Mawada: use named columns for Order Number, Recipient Delivery Date, Recipient Name, Recipient Phone, Recipient Address, Vendor Name, Item Details and Quantity. Only deliveries due today in Kuwait are selected. Use one row per item. For the Mawada template, use reference, recipient, phone, address, vendorCode, name, quantity in that order.</p><input id="excel" type="file" accept=".xlsx"><button id="preview">Validate and preview</button><div id="previewResult"></div></section>`;
+  c.innerHTML = `<section><h2>Create order</h2><form id="order"><div class="grid">${field("reference", "Your order reference")}${field("recipient", "Recipient name")}${field("phone", "Phone (+965 followed by 8 digits)")}${field("address", "Delivery address")}<label>Delivery date<input name="deliveryDate" type="date"></label><label>Time window (Kuwait)<input name="timeSlot" placeholder="09:00-12:00"></label><label>Area<input name="area" maxlength="100" placeholder="e.g. Salmiya"></label></div><label class="check"><input name="whatsappConsent" type="checkbox"> Customer agreed to WhatsApp delivery updates</label><h3>Items and pickups</h3><div id="items"></div><button type="button" id="add">Add item</button><button>Create order</button></form></section><section><h2>Upload Excel (.xlsx)</h2><a class="primaryLink" href="${window.relayDemo ? "/Mawada-CMS-Order-Template.xlsx" : "/api/import/template"}" download="Mawada-CMS-Order-Template.xlsx">Download CMS Excel template</a><p class="muted">Includes required/optional fields, multi-item example rows and CMS instructions. Remove example rows before import. Template download requires a live account with order import access.</p><label>Export format<select id="importFormat"><option value="mawada">Mawada CMS · deliveries due today (Kuwait)</option><option value="template">Mawada item-row template</option></select></label><p>Mawada: use named columns for Order Number, Recipient Delivery Date, Recipient Name, Recipient Phone, Recipient Address, Vendor Name, Item Details and Quantity. Only deliveries due today in Kuwait are selected. Use one row per item. For the Mawada template, use reference, recipient, phone, address, vendorCode, name, quantity in that order.</p><input id="excel" type="file" accept=".xlsx"><button id="preview">Validate and preview</button><div id="previewResult"></div></section>`;
   if (state.user.role === "admin" && !window.relayDemo) {
     c.insertAdjacentHTML(
       "afterbegin",
@@ -389,12 +414,30 @@ function create(c) {
   };
   bindForm("#order", "orders", (b) => ({
     ...b,
+    whatsappConsent: b.whatsappConsent === "on",
     items: [...document.querySelectorAll("#items .item")].map((i) => ({
       vendorCode: i.querySelector(".vendor").value,
       name: i.querySelector(".name").value,
       quantity: Number(i.querySelector(".quantity").value),
     })),
   }));
+  if (!window.relayDemo) {
+    $("#preview").insertAdjacentHTML(
+      "beforebegin",
+      `<details><summary>Saved CMS column mapping</summary><p>Enter your export’s exact column headings. Leave blank to use the standard Mawada headings. Mapping is saved for your account; this still needs validation against your actual CMS export.</p><form id="mappingForm"><div class="grid">${["date", "reference", "recipient", "phone", "address", "vendor", "item", "quantity", "slot", "amount", "bell", "directions", "card", "occasion", "message"].map((k) => `<label>${k}<input name="${k}" value="${esc(state.user.importMapping?.[k] || "")}" maxlength="120"></label>`).join("")}</div><button>Save mapping</button></form></details><label class="check"><input type="checkbox" id="skipDuplicates"> Skip existing order references after review</label><div id="importErrors" role="alert"></div>`,
+    );
+    $("#mappingForm").onsubmit = (e) => {
+      e.preventDefault();
+      run(async () => {
+        const mapping = Object.fromEntries(
+          [...new FormData(e.target)].filter(([, v]) => v.trim()),
+        );
+        await api("import/mapping", { mapping });
+        state = await api("state");
+        toast("CMS mapping saved for this account");
+      });
+    };
+  }
   $("#preview").onclick = () =>
     run(async () => {
       const file = $("#excel").files[0];
@@ -402,12 +445,29 @@ function create(c) {
       const f = new FormData();
       f.append("file", file);
       const format = $("#importFormat").value;
-      const result = await api("import?format=" + format, f);
+      const suffix =
+        "&skipDuplicates=" + ($("#skipDuplicates")?.checked ? "yes" : "no");
+      let result;
+      try {
+        result = await api("import?format=" + format + suffix, f);
+      } catch (e) {
+        if ($("#importErrors"))
+          $("#importErrors").textContent =
+            e.message +
+            (e.duplicates?.length
+              ? " " +
+                e.duplicates
+                  .map((d) => d.reference + ": " + d.reason)
+                  .join("; ")
+              : "");
+        throw e;
+      }
+      if ($("#importErrors")) $("#importErrors").textContent = "";
       $("#previewResult").innerHTML =
-        `<p>${result.count} valid orders${result.today ? " due " + esc(result.today) + " in Kuwait · " + result.excluded.length + " rows excluded" : ""}</p>${result.excluded?.length ? `<details><summary>Excluded rows</summary>${result.excluded.map((row) => `<p>Row ${row.row}: ${esc(row.reason)}</p>`).join("")}</details>` : ""}${result.orders.map((o) => `<section class="importPreview"><strong>${esc(o.reference)} · ${esc(o.recipient)}</strong><p>${esc(o.phone)} · ${esc(o.address)}</p><p>${o.items.map((i) => esc(i.name) + " × " + i.quantity + " · " + esc(i.vendor?.name || i.vendorCode)).join("<br>")}</p>${o.source === "Mawada CMS" ? `<p>${esc(o.deliveryDate)} · ${esc(o.timeSlot || "No slot provided")} · ${o.amountFils == null ? "Value not provided" : (o.amountFils / 1000).toFixed(3) + " KWD"}</p><p>Ring bell: ${o.ringBell == null ? "Not provided" : o.ringBell ? "Yes" : "No"} · Card: ${o.cardAvailable == null ? "Not provided" : o.cardAvailable ? "Yes" : "No"}</p><p>${esc(o.extraDirections || "No extra directions")}</p><p>Occasion: ${esc(o.occasion?.value || "Unknown")} ${o.occasion?.needsReview ? "· Requires review" : ""}</p>` : ""}</section>`).join("")}<button id="confirm" ${result.count ? "" : "disabled"}>Confirm import</button>`;
+        `<p>${result.duplicates?.length ? result.duplicates.length + " existing references excluded · " : ""}${result.count} valid orders${result.today ? " due " + esc(result.today) + " in Kuwait · " + result.excluded.length + " rows excluded" : ""}</p>${result.excluded?.length ? `<details><summary>Excluded rows</summary>${result.excluded.map((row) => `<p>Row ${row.row}: ${esc(row.reason)}</p>`).join("")}</details>` : ""}${result.orders.map((o) => `<section class="importPreview"><strong>${esc(o.reference)} · ${esc(o.recipient)}</strong><p>${esc(o.phone)} · ${esc(o.address)}</p><p>${o.items.map((i) => esc(i.name) + " × " + i.quantity + " · " + esc(i.vendor?.name || i.vendorCode)).join("<br>")}</p>${o.source === "Mawada CMS" ? `<p>${esc(o.deliveryDate)} · ${esc(o.timeSlot || "No slot provided")} · ${o.amountFils == null ? "Value not provided" : (o.amountFils / 1000).toFixed(3) + " KWD"}</p><p>Ring bell: ${o.ringBell == null ? "Not provided" : o.ringBell ? "Yes" : "No"} · Card: ${o.cardAvailable == null ? "Not provided" : o.cardAvailable ? "Yes" : "No"}</p><p>${esc(o.extraDirections || "No extra directions")}</p><p>Occasion: ${esc(o.occasion?.value || "Unknown")} ${o.occasion?.needsReview ? "· Requires review" : ""}</p>` : ""}</section>`).join("")}<button id="confirm" ${result.count ? "" : "disabled"}>Confirm import</button>`;
       $("#confirm").onclick = () =>
         run(async () => {
-          await api("import?confirm=yes&format=" + format, f);
+          await api("import?confirm=yes&format=" + format + suffix, f);
           view = "orders";
           await refresh();
         });
@@ -623,9 +683,10 @@ function orders(c) {
               .join("");
             $("#signatureArea").hidden = action !== "Delivered";
             $("#proof").showModal();
+            await ProofDrafts.begin();
             return;
           }
-          let extra = { item: b.dataset.item };
+          let extra = { item: b.dataset.item, pickup: b.dataset.pickup };
           if (action === "Out for delivery") {
             dispatchOrder = o;
             $("#dispatchItems").innerHTML = o.items
@@ -711,7 +772,10 @@ function clear() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   signed = false;
 }
-$("#clear").onclick = clear;
+$("#clear").onclick = () => {
+  clear();
+  ProofDrafts.autosave();
+};
 canvas.onpointerdown = (e) => {
   drawing = true;
   canvas.setPointerCapture(e.pointerId);
@@ -732,48 +796,89 @@ canvas.onpointermove = (e) => {
   ctx.stroke();
   signed = true;
 };
-canvas.onpointerup = () => (drawing = false);
+canvas.onpointerup = () => {
+  drawing = false;
+  ProofDrafts.autosave();
+};
 canvas.onpointercancel = () => (drawing = false);
-$("#cancel").onclick = () => $("#proof").close();
+async function closeProofForm() {
+  const draft = await ProofDrafts.save();
+  if (
+    draft?.volatile &&
+    !confirm(
+      "This proof could not be saved on the device. Closing may lose the draft. Close anyway?",
+    )
+  )
+    return;
+  $("#proof").close();
+}
+$("#cancel").onclick = () => run(closeProofForm);
+$("#proof").addEventListener("cancel", (e) => {
+  e.preventDefault();
+  run(closeProofForm);
+});
 $("#proofForm").onsubmit = (e) => {
   e.preventDefault();
   run(async () => {
+    let cleanupWarning = false;
     if (proofStage === "Delivered" && !signed)
       throw Error("Recipient signature required");
-    const f = new FormData(e.target),
-      file = f.get("photo");
-    if (file.size > 4 * 1024 * 1024)
-      throw Error("Photo must be smaller than 4 MB");
-    const photo =
-      window.relayDemo && !file.size
-        ? window.relayDemo.samplePhoto
-        : await new Promise((res, rej) => {
+    if (window.relayDemo) {
+      const f = new FormData(e.target),
+        file = f.get("photo");
+      const photo = file.size
+        ? await new Promise((resolve, reject) => {
             const r = new FileReader();
-            r.onload = () => res(r.result);
-            r.onerror = rej;
+            r.onload = () => resolve(r.result);
+            r.onerror = reject;
             r.readAsDataURL(file);
-          });
-    const pos = window.relayDemo
-      ? { coords: { latitude: 29.3759, longitude: 47.9774 } }
-      : await new Promise((res, rej) =>
-          navigator.geolocation.getCurrentPosition(
-            res,
-            () => rej(Error("Allow GPS access to record proof")),
-            { enableHighAccuracy: true, timeout: 20000 },
-          ),
+          })
+        : window.relayDemo.samplePhoto;
+      await api("orders/" + proofOrder + "/action", {
+        action: proofStage,
+        pickup: proofPickup,
+        name: f.get("name"),
+        verifiedItems: f.getAll("verifiedItems"),
+        photo,
+        signature: proofStage === "Delivered" ? canvas.toDataURL() : undefined,
+        lat: 29.3759,
+        lng: 47.9774,
+      });
+    } else {
+      // Persist before requesting GPS or a network upload.
+      let draft = await ProofDrafts.save();
+      if (!draft.body.photo) throw Error("Select a proof photo");
+      if (!draft.body.capturedAt) {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation
+            ? navigator.geolocation.getCurrentPosition(
+                resolve,
+                () =>
+                  reject(
+                    Error(
+                      "Allow GPS access. Your draft is saved on this device; retry at the handover location.",
+                    ),
+                  ),
+                { enableHighAccuracy: true, timeout: 20000 },
+              )
+            : reject(Error("GPS is unavailable; draft retained")),
         );
-    await api("orders/" + proofOrder + "/action", {
-      action: proofStage,
-      pickup: proofPickup,
-      verifiedItems: f.getAll("verifiedItems"),
-      name: f.get("name"),
-      photo,
-      signature: proofStage === "Delivered" ? canvas.toDataURL() : undefined,
-      lat: pos.coords.latitude,
-      lng: pos.coords.longitude,
-    });
+        draft = await ProofDrafts.save(pos);
+      }
+      await api("orders/" + proofOrder + "/action", draft.body);
+      try {
+        await ProofDrafts.remove(draft.id);
+      } catch {
+        cleanupWarning = true;
+      }
+    }
     $("#proof").close();
     await refresh();
+    if (cleanupWarning)
+      toast(
+        "Proof uploaded, but local draft cleanup failed. Verify the order and clear this device’s browser data.",
+        "error",
+      );
   });
 };
 $("#logout").onclick = () =>
@@ -781,7 +886,28 @@ $("#logout").onclick = () =>
     try {
       await stopLocationSharing();
     } catch {}
+    const drafts = window.relayDemo
+      ? []
+      : (await ProofDrafts.all().catch(() => [])).filter(
+          (r) => r.userId === state.user.id,
+        );
+    if (
+      drafts.length &&
+      !confirm(
+        "You have pending on-device proof drafts. Signing out deletes them from this device. Sign out and delete drafts?",
+      )
+    )
+      return;
     await api("logout", {});
+    if (!window.relayDemo) {
+      try {
+        await ProofDrafts.clearUser(state.user.id);
+      } catch {
+        alert(
+          "Signed out. Local draft cleanup failed; clear this device’s browser data before sharing it.",
+        );
+      }
+    }
     if (window.relayDemo) location.assign("/");
     else location.reload();
   });

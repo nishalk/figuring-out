@@ -356,6 +356,8 @@ function renderDriverPanel(root) {
     .flatMap((o) => RelayOperations.activeTrips(o))
     .filter((t) => t.driver === state.user.id).length;
   root.innerHTML = `<section class="driverConsole"><div class="row"><div><div class="eyebrow">DRIVER WORKSPACE</div><h2>Your next stop starts here.</h2></div><button id="driverShift">${state.user.shift?.active ? "End shift" : "Start shift"}</button><button id="scanOrder">Scan / claim AWB</button></div><div class="driverCounters"><span><strong>${state.orders.length}</strong> Assigned orders</span><span><strong>${pending}</strong> Pending pickups</span><span><strong>${active}</strong> Active trips</span></div><div class="locationTools"><button class="ghost" id="shareLocation">${watchId === null ? "Share my location" : "Stop location sharing"}</button><span id="gpsState">${watchId === null ? "Location sharing is off" : "Sharing GPS while this screen is open"}</span></div><p class="muted">Starting a trip asks for location permission. Tracking pauses if this screen closes, the phone locks, or the browser goes into the background. Delivery proof still requires GPS.</p></section>`;
+  root.insertAdjacentHTML("beforeend", '<div id="driverFocus"></div>');
+  renderDriverFocus(root.querySelector("#driverFocus"));
   root.querySelector("#driverShift").onclick = () =>
     run(async () => {
       const ending = Boolean(state.user.shift?.active);
