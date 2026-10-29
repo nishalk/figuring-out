@@ -92,6 +92,7 @@ module.exports = function install(app, store, permit) {
       pickup: q.body.pickupId,
       at: now(),
     });
+    require("./customer-updates").queueUpdate(order, "assign", q.user.id);
     r.json(await store.save("orders", order));
   });
   app.post("/api/driver/shift", driver, async (q, r) => {

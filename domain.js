@@ -58,7 +58,21 @@ function validateProof(body, delivery = false) {
     throw Error("Name, valid photo and GPS required");
   if (delivery && !validImage(signature, true))
     throw Error("Valid signature required");
+  let capturedAt;
+  if (body.capturedAt !== undefined) {
+    const captured = Date.parse(body.capturedAt);
+    if (
+      !Number.isFinite(captured) ||
+      captured > Date.now() + 60000 ||
+      Date.now() - captured > 86400000
+    )
+      throw Error(
+        "Proof draft capture is invalid or more than 24 hours old. Contact operations to reconcile the handover.",
+      );
+    capturedAt = new Date(captured).toISOString();
+  }
   return {
+    capturedAt,
     name: name.trim(),
     photo,
     signature: delivery ? signature : undefined,

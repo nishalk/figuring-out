@@ -73,11 +73,31 @@ function occasionSuggestion(value) {
     candidates: matches,
   };
 }
-function parseMawada(sheet, { now = new Date(), vendors = [] } = {}) {
+const mappingFields = [
+  "date",
+  "reference",
+  "recipient",
+  "phone",
+  "address",
+  "vendor",
+  "item",
+  "quantity",
+  "slot",
+  "amount",
+  "bell",
+  "directions",
+  "card",
+  "occasion",
+  "message",
+];
+function parseMawada(
+  sheet,
+  { now = new Date(), vendors = [], mapping = {} } = {},
+) {
   const headers = sheet.getRow(1).values.map((v) => key(text(v)));
   const find = (names, required = false) => {
     const index = headers.findIndex((h) => names.includes(h));
-    if (index < 0 && required)
+    if (index < 0 && required && !Object.keys(mapping).length)
       throw Error("Missing Mawada column: " + names[0]);
     return index;
   };
@@ -110,6 +130,28 @@ function parseMawada(sheet, { now = new Date(), vendors = [] } = {}) {
     occasion: find(["occasion", "occassion"]),
     message: find(["card message", "gift message"]),
   };
+  for (const [field, header] of Object.entries(mapping)) {
+    if (!mappingFields.includes(field) || typeof header !== "string")
+      throw Error("Invalid column mapping");
+    const matches = headers.reduce(
+      (a, h, i) => (h === key(header) ? [...a, i] : a),
+      [],
+    );
+    if (matches.length !== 1)
+      throw Error("Mapped column must match one heading: " + header);
+    col[field] = matches[0];
+  }
+  for (const field of [
+    "date",
+    "reference",
+    "recipient",
+    "phone",
+    "address",
+    "vendor",
+    "item",
+    "quantity",
+  ])
+    if (col[field] < 1) throw Error("Missing Mawada column for " + field);
   const today = kuwaitDay(now),
     groups = new Map(),
     excluded = [],
@@ -252,4 +294,10 @@ function parseMawada(sheet, { now = new Date(), vendors = [] } = {}) {
     totalRows: sheet.rowCount - 1,
   };
 }
-module.exports = { parseMawada, deliveryDay, kuwaitDay, occasionSuggestion };
+module.exports = {
+  parseMawada,
+  deliveryDay,
+  kuwaitDay,
+  occasionSuggestion,
+  mappingFields,
+};

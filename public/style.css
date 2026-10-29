@@ -2698,3 +2698,45 @@ canvas {
   background: var(--accent-soft);
   border-radius: 10px;
 }
+.controlTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 1rem;
+}
+.controlMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.controlMetrics article,
+.recoveryPlan,
+.updateRow,
+.draftRow {
+  border: 1px solid var(--border, #716174);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-block: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.controlMetrics strong,
+.controlMetrics small {
+  display: block;
+}
+.controlMetrics strong {
+  margin-top: 0.5rem;
+  font-size: 1.15rem;
+}
+.controlOrderList {
+  max-height: 380px;
+  overflow-y: auto;
+  margin-block: 1rem;
+}
+.exceptionCard details,
+.driverNext .row {
+  margin-top: 1rem;
+}
+.exceptionCard textarea {
+  min-height: 90px;
+}

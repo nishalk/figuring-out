@@ -15,6 +15,9 @@ const path = require("node:path");
 const { createStorage } = require("./storage");
 const operations = require("./public/operations");
 const access = require("./public/access");
+const control = require("./control-routes");
+const customerUpdates = require("./customer-updates");
+const { DurableSessions, validPassword } = require("./reliability");
 async function main() {
   const store = createStorage();
   const all = (kind) => store.all(kind);
@@ -22,6 +25,11 @@ async function main() {
   const save = (kind, body) => store.save(kind, body);
   const app = express();
   app.set("trust proxy", 1);
+  app.set("json replacer", (key, value) =>
+    ["password", "reset", "trackingTokens", "customerUpdates"].includes(key)
+      ? undefined
+      : value,
+  );
   app.use(express.json({ limit: "8mb" }));
   const production = process.env.NODE_ENV === "production";
   if (production && (process.env.SESSION_SECRET || "").length < 32)
@@ -38,8 +46,12 @@ async function main() {
     );
   const secret =
     process.env.SESSION_SECRET || crypto.randomBytes(48).toString("hex");
+  const runtime = new DurableSessions(
+    process.env.DATA_DIR || path.resolve("data"),
+  );
   app.use(
     session({
+      store: runtime,
       secret,
       resave: false,
       saveUninitialized: false,
@@ -52,6 +64,15 @@ async function main() {
     }),
   );
   app.use(express.static(path.join(__dirname, "public")));
+  app.use("/api", (q, r, next) => {
+    r.set("Cache-Control", "no-store");
+    if (q.method !== "GET" && q.get("sec-fetch-site") === "cross-site")
+      return r.sendStatus(403);
+    next();
+  });
+  app.use("/api/login", runtime.limiter("login", 30, 900000));
+  app.use("/api/setup", runtime.limiter("setup", 30, 900000));
+  control.installPublic(app, store, runtime);
   app.get("/api/setup", async (_, r) =>
     r.json({
       required: (await all("users")).length === 0,
@@ -77,8 +98,7 @@ async function main() {
       !q.body.name.trim() ||
       typeof q.body.email !== "string" ||
       !q.body.email.trim() ||
-      typeof q.body.password !== "string" ||
-      q.body.password.length < 12
+      !validPassword(q.body.password)
     )
       return r.status(400).json({
         error: "Name, email and a password of at least 12 characters required",
@@ -99,7 +119,9 @@ async function main() {
     if (
       !u ||
       u.deletedAt ||
-      !bcrypt.compareSync(q.body.password || "", u.password)
+      typeof q.body.password !== "string" ||
+      Buffer.byteLength(q.body.password, "utf8") > 1024 ||
+      !bcrypt.compareSync(q.body.password, u.password)
     )
       return r.status(401).json({ error: "Invalid login" });
     if (u.role === "driver") {
@@ -187,11 +209,12 @@ async function main() {
     n();
   });
   require("./operational-routes")(app, store, permit);
+  control.install(app, store, permit, runtime);
   app.get("/api/state", async (q, r) => {
     const orders = (await all("orders"))
       .map((o) => {
         pickupTasks(o);
-        return o;
+        return control.publicOrder(o);
       })
       .filter(
         (o) =>
@@ -208,6 +231,7 @@ async function main() {
           .map(
             ({
               password,
+              reset,
               locationHistory,
               activity,
               stationary,
@@ -218,7 +242,7 @@ async function main() {
           )
       : [];
     r.json({
-      user: { ...q.user, password: undefined },
+      user: control.publicUser(q.user),
       storageBackend: q.user.role === "admin" ? store.backend : undefined,
       users,
       vendors: q.user.role === "driver" ? [] : await all("vendors"),
@@ -237,8 +261,7 @@ async function main() {
       !name ||
       typeof email !== "string" ||
       !email.trim() ||
-      typeof password !== "string" ||
-      password.length < 12 ||
+      !validPassword(password) ||
       (permissions !== undefined && !access.validate(role, permissions)) ||
       !["admin", "operations", "warehouse", "driver"].includes(role) ||
       (await all("users")).some((u) => u.email === email.trim().toLowerCase())
@@ -278,8 +301,7 @@ async function main() {
       !name ||
       !email.includes("@") ||
       !["admin", "operations", "warehouse", "driver"].includes(role) ||
-      (q.body.password &&
-        (typeof q.body.password !== "string" || q.body.password.length < 12))
+      (q.body.password && !validPassword(q.body.password))
     )
       return r.status(400).json({
         error:
@@ -303,6 +325,7 @@ async function main() {
     Object.assign(user, { name, email, role });
     if (q.body.password) {
       user.password = bcrypt.hashSync(q.body.password, 12);
+      user.reset = null;
       user.authVersion = (user.authVersion || 0) + 1;
     }
     user.accountHistory = [
@@ -395,6 +418,13 @@ async function main() {
       );
     if ((await all("orders")).some((o) => o.reference === b.reference))
       throw Error("Duplicate reference");
+    if (b.deliveryDate)
+      b.deliveryDate = require("./mawada-import").deliveryDay(b.deliveryDate);
+    if (
+      b.timeSlot &&
+      (typeof b.timeSlot !== "string" || b.timeSlot.length > 120)
+    )
+      throw Error("Delivery window must be text of at most 120 characters");
     const vendors = await all("vendors");
     const items = b.items.map((i) => {
       const vendor = vendors.find((v) => v.code === i.vendorCode);
@@ -425,6 +455,12 @@ async function main() {
       items,
       status: "Created",
       driver: null,
+      deliveryDate: b.deliveryDate || undefined,
+      timeSlot: b.timeSlot || "",
+      area: String(b.area || "")
+        .trim()
+        .slice(0, 100),
+      whatsappConsent: b.whatsappConsent === true,
       ...(b.source === "Mawada CMS"
         ? {
             source: b.source,
@@ -474,6 +510,34 @@ async function main() {
         .send(Buffer.from(await book.xlsx.writeBuffer()));
     },
   );
+  app.post(
+    "/api/import/mapping",
+    permit("admin", "operations"),
+    async (q, r) => {
+      if (!require("./public/access").allowed(q.user, "create"))
+        return r.sendStatus(403);
+      const mapping = q.body.mapping;
+      if (
+        !mapping ||
+        typeof mapping !== "object" ||
+        Array.isArray(mapping) ||
+        Object.entries(mapping).some(
+          ([k, v]) =>
+            !require("./mawada-import").mappingFields.includes(k) ||
+            typeof v !== "string" ||
+            !v.trim() ||
+            v.length > 120,
+        )
+      )
+        return r.status(400).json({
+          error: "Use a supported field and exact Excel column heading",
+        });
+      const user = await get("users", q.user.id);
+      user.importMapping = mapping;
+      await save("users", user);
+      r.json({ ok: true });
+    },
+  );
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
@@ -501,6 +565,9 @@ async function main() {
         ) {
           const parsed = require("./mawada-import").parseMawada(sheet, {
             vendors: await all("vendors"),
+            mapping: q.body.mapping
+              ? JSON.parse(q.body.mapping)
+              : q.user.importMapping || {},
           });
           if (parsed.errors.length)
             return r.status(400).json({
@@ -509,7 +576,26 @@ async function main() {
               excluded: parsed.excluded,
               today: parsed.today,
             });
-          const orders = await Promise.all(parsed.orders.map(prepareOrder));
+          const existing = new Set(
+            (await all("orders")).map((o) => o.reference),
+          );
+          const duplicates = parsed.orders
+            .filter((o) => existing.has(o.reference))
+            .map((o) => ({
+              reference: o.reference,
+              reason: "Reference already exists; not imported",
+            }));
+          if (duplicates.length && q.query.skipDuplicates !== "yes")
+            return r.status(409).json({
+              error:
+                "Duplicate references found. Review the duplicate list and explicitly choose Skip existing references.",
+              duplicates,
+            });
+          const orders = await Promise.all(
+            parsed.orders
+              .filter((o) => !existing.has(o.reference))
+              .map(prepareOrder),
+          );
           if (q.query.confirm === "yes") {
             if (!orders.length)
               throw Error("No orders are due today in Kuwait.");
@@ -517,6 +603,7 @@ async function main() {
           }
           return r.json({
             ...parsed,
+            duplicates,
             orders,
             count: orders.length,
             committed: q.query.confirm === "yes",
@@ -747,6 +834,14 @@ async function main() {
           driverId: task.driver,
           capturedBy: q.user.name,
         };
+        if (
+          proof.capturedAt &&
+          (!proof.gpsAtCapture ||
+            Math.abs(
+              Date.parse(proof.gpsAtCapture.at) - Date.parse(proof.capturedAt),
+            ) > 120000)
+        )
+          proof.gpsAtCapture = null;
         operations.finishTrip(o, "pickup", task.id, "Completed", at);
         task.completed = true;
         task.proof = proof;
@@ -767,6 +862,7 @@ async function main() {
         if (!pickups.find((p) => p.vendor.id === item.vendor.id)?.completed)
           throw Error("Complete this vendor pickup first");
         item.received = true;
+        item.receivedAt = at;
         syncStatus(o);
         detail = { item: item.id };
       } else if (action === "add-item") {
@@ -832,6 +928,7 @@ async function main() {
         if (o.status !== "Delivery failed" || o.returned)
           throw Error("Choose a failed delivery awaiting return");
         o.returned = true;
+        o.warehouseReadyAt = at;
       } else if (action === "reschedule") {
         if (!manager) return deny();
         if (o.status !== "Delivery failed" || !o.returned)
@@ -845,6 +942,7 @@ async function main() {
         )
           throw Error("Choose today or a future valid delivery date");
         o.deliveryDate = q.body.date;
+        delete o.deliveryDueAt;
         o.status = "At warehouse";
         o.driver = null;
         detail = { date: q.body.date };
@@ -878,6 +976,14 @@ async function main() {
           driverId: o.driver,
           capturedBy: q.user.name,
         };
+        if (
+          proof.capturedAt &&
+          (!proof.gpsAtCapture ||
+            Math.abs(
+              Date.parse(proof.gpsAtCapture.at) - Date.parse(proof.capturedAt),
+            ) > 120000)
+        )
+          proof.gpsAtCapture = null;
         o = transition(o, action);
         operations.finishTrip(o, "delivery", null, "Completed", at);
         (o.proofs ??= []).push({ ...proof, stage: action });
@@ -896,7 +1002,10 @@ async function main() {
         at: new Date().toISOString(),
         ...detail,
       });
-      r.json(await save("orders", o));
+      if (o.status === "At warehouse" && !o.warehouseReadyAt)
+        o.warehouseReadyAt = at;
+      customerUpdates.queueUpdate(o, action, q.user.id);
+      r.json(control.publicOrder(await save("orders", o)));
     } catch (e) {
       r.status(e.status || 400).json({ error: e.message });
     }
@@ -911,6 +1020,7 @@ async function main() {
       await save("orders", order);
     } else if (mediaChanged) await save("orders", order);
   }
+  require("./scripts/backup.cjs").schedule();
   return app;
 }
 module.exports = { createApplication: main };
